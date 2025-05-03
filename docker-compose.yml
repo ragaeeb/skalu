@@ -1,0 +1,12 @@
+version: '3'
+
+services:
+  skalu:
+    build: .
+    volumes:
+      - ./input:/data
+      - ./output:/output
+    environment:
+      - INPUT_DIR=/data
+      - OUTPUT_DIR=/output
+    command: all

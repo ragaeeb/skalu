@@ -1,11 +1,32 @@
 # See https://help.github.com/ignore-files/ for more about ignoring files.
 
-# production
-/build
-/tmp
-dist
-
-# misc
-.DS_Store
-
 .flaskenv*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+env/
+.env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
