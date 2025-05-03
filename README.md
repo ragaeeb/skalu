@@ -1,7 +1,6 @@
-# skalu 🎵➡️🎤
+# skalu
 
 <div align="center">
-  <img src="https://via.placeholder.com/600x200/2B3D4F/FFFFFF?text=Skalu+Line+Detection" alt="Skalu Banner">
   <img src="https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d.svg" />
   <a href="https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
@@ -108,7 +107,7 @@ Skalu generates a JSON file with detailed information about the detected lines:
 
 You can use Skalu directly in Google Colab without any local installation:
 
-1. Open the [Skalu Colab Notebook](https://colab.research.google.com/github/yourusername/skalu/blob/main/skalu.ipynb)
+1. Open the [Skalu Colab Notebook](https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb)
 2. Upload your images using the file browser
 3. Run the notebook to process all images
 4. Download the results
