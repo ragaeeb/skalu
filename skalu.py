@@ -6,72 +6,79 @@ import argparse
 from tqdm import tqdm
 from PIL import Image
 
-def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10):
+def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
     """
-    Detects only long, thin horizontal lines in an image.
-    
+    Detects only long, thin horizontal lines in an image, and optionally dumps
+    intermediate masks to debug_dir.
+
     Args:
         image: Input image (BGR or grayscale)
         min_line_width_ratio: Minimum line width, as a fraction of image width
         max_line_height: Maximum allowed thickness of a line in pixels
-        
+        debug_dir: if not None, directory where intermediate steps will be saved
+
     Returns:
         A sorted list of {"x","y","width","height"} dicts for each line
     """
     h, w = image.shape[:2]
-    
+
+    # Prepare debug directory
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+
     # -- 1) Grayscale
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray = image.copy()
-    
-    # -- 2) Try a global Otsu threshold (inverted) so that black bars -> white
-    _, bw = cv2.threshold(
-        gray, 
-        0, 
-        255, 
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_01_gray.png"), gray)
+
+    # -- 2) Global Otsu threshold (inverted) so that black bars -> white
+    _, bw_otsu = cv2.threshold(
+        gray,
+        0,
+        255,
         cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
     )
-    
-    # -- 3) If absolutely nothing is found, fall back to adaptive threshold
-    #    (e.g. for really uneven scans)
-    #    We only switch if bw is almost empty.
-    if cv2.countNonZero(bw) < 100:
-        bw = cv2.adaptiveThreshold(
-            gray, 255, 
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY_INV, 
-            15,  # block size
-            8    # C
-        )
-    
-    # -- 4) Morphological open with a *dynamic* horizontal kernel
-    min_width = int(min_line_width_ratio * w)
-    # kernel: very flat, wide enough to kill any run < min_width
-    horiz_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (min_width, 1))
-    opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, horiz_kern, iterations=1)
-    
-    # -- 5) Find the remaining connected components (these are your bars)
-    contours, _ = cv2.findContours(
-        opened, 
-        cv2.RETR_EXTERNAL, 
-        cv2.CHAIN_APPROX_SIMPLE
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_02_otsu.png"), bw_otsu)
+
+    # -- 3) Adaptive threshold (inverted), to catch faint lines
+    bw_adapt = cv2.adaptiveThreshold(
+        gray, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        15,  # block size
+        8    # C
     )
-    
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_03_adaptive.png"), bw_adapt)
+
+    # -- 4) Union of Otsu + adaptive
+    bw = cv2.bitwise_or(bw_otsu, bw_adapt)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_04_union.png"), bw)
+
+    # -- 5) Morphological open with a dynamic horizontal kernel
+    orig_min_width = int(min_line_width_ratio * w)
+    # make the open‐kernel a bit smaller (80%) so broken/faint bars still survive erosion
+    open_width = max(int(orig_min_width * 0.8), 1)
+    horiz_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (open_width, 1))
+    opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, horiz_kern, iterations=1)
+
+    # … then your usual contour‐find + filter:
+    contours, _ = cv2.findContours(
+        opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
     lines = []
     for c in contours:
         x, y, cw, ch = cv2.boundingRect(c)
-        # keep only sufficiently long, very thin strips
-        if cw >= min_width and ch <= max_line_height:
-            lines.append({
-                "x": int(x),
-                "y": int(y),
-                "width": int(cw),
-                "height": int(ch)
-            })
-    
-    # sort top→bottom
+        # *still* require the original minimum width
+        if cw >= orig_min_width and ch <= max_line_height:
+            lines.append({"x":x, "y":y, "width":cw, "height":ch})
+
     lines.sort(key=lambda L: L["y"])
     return lines
 
@@ -90,31 +97,35 @@ def draw_detections(image, horizontal_lines):
         x, y, w, h = L["x"], L["y"], L["width"], L["height"]
         cv2.rectangle(debug, (x, y), (x + w, y + h), (0, 255, 0), 2)
         cv2.putText(
-            debug, f"#{i+1}", 
-            (x, y - 6), 
-            cv2.FONT_HERSHEY_SIMPLEX, 
-            0.5, 
-            (0, 0, 255), 
-            1, 
+            debug, f"#{i+1}",
+            (x, y - 6),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 255),
+            1,
             cv2.LINE_AA
         )
     return debug
 
-def process_single_image(image_path, output_json_path, params=None):
+def process_single_image(image_path, output_json_path, params=None, debug_dir=None):
     if params is None:
         params = {}
-    
+
     img = cv2.imread(image_path)
     if img is None:
         print(f"Warning: Unable to load image at {image_path}")
         return False
-    
+
+    # Prepare debug directory if requested
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+
     dpi_x, dpi_y = get_image_dpi(image_path)
     min_ratio = params.get('min_line_width_ratio', 0.2)
     max_h     = params.get('max_line_height', 10)
-    
-    lines = detect_horizontal_lines(img, min_ratio, max_h)
-    
+
+    lines = detect_horizontal_lines(img, min_ratio, max_h, debug_dir)
+
     result = {
         "image_info": {
             "path": image_path,
@@ -130,32 +141,32 @@ def process_single_image(image_path, output_json_path, params=None):
         "horizontal_lines": lines,
         "line_count":       len(lines)
     }
-    
+
     os.makedirs(os.path.dirname(os.path.abspath(output_json_path)), exist_ok=True)
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=4, ensure_ascii=False)
     print(f"Saved detection for {image_path} → {output_json_path}")
-    
+
     debug_img = draw_detections(img, lines)
     dbg_path = os.path.splitext(output_json_path)[0] + "_detected.jpg"
     cv2.imwrite(dbg_path, debug_img)
     print(f"Saved visualization → {dbg_path}")
-    
+
     return True
 
-def process_folder(folder_path, output_json_path, params=None):
+def process_folder(folder_path, output_json_path, params=None, debug_dir=None):
     if params is None:
         params = {}
-    
+
     all_res = {}
     exts = [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
     imgs = sorted([f for f in os.listdir(folder_path)
                    if any(f.lower().endswith(e) for e in exts)])
-    
+
     if not imgs:
         print(f"No supported images found in {folder_path}")
         return False
-    
+
     print(f"Found {len(imgs)} images in {folder_path}")
     for fn in tqdm(imgs, desc="Processing"):
         path = os.path.join(folder_path, fn)
@@ -163,12 +174,13 @@ def process_folder(folder_path, output_json_path, params=None):
         if img is None:
             print(f"Warning: cannot read {fn}, skipping.")
             continue
-        
+
         dpi_x, dpi_y = get_image_dpi(path)
         min_ratio = params.get('min_line_width_ratio', 0.2)
         max_h     = params.get('max_line_height', 10)
-        
-        lines = detect_horizontal_lines(img, min_ratio, max_h)
+
+        # For folder processing, we don't dump per-image debug by default
+        lines = detect_horizontal_lines(img, min_ratio, max_h, None)
         all_res[fn] = {
             "image_info": {
                 "path":   path,
@@ -180,11 +192,11 @@ def process_folder(folder_path, output_json_path, params=None):
             "horizontal_lines": lines,
             "line_count":       len(lines)
         }
-        
+
         dbg = draw_detections(img, lines)
         dbg_fn = os.path.splitext(fn)[0] + "_detected.jpg"
         cv2.imwrite(os.path.join(folder_path, dbg_fn), dbg)
-    
+
     # summary
     all_res["_summary"] = {
         "total_images": len(imgs),
@@ -193,12 +205,12 @@ def process_folder(folder_path, output_json_path, params=None):
             "max_line_height":     params.get('max_line_height', 10)
         }
     }
-    
+
     os.makedirs(os.path.dirname(os.path.abspath(output_json_path)), exist_ok=True)
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(all_res, f, indent=4, ensure_ascii=False)
     print(f"Saved all results → {output_json_path}")
-    
+
     return True
 
 def main():
@@ -209,13 +221,15 @@ def main():
                         help="Min line width as fraction of image width")
     parser.add_argument("--max-height", type=int, default=10,
                         help="Max line thickness in pixels")
+    parser.add_argument("--debug-dir", default=None,
+                        help="If set, dumps intermediate masks into this directory")
     args = parser.parse_args()
-    
+
     params = {
         'min_line_width_ratio': args.min_width_ratio,
         'max_line_height':      args.max_height
     }
-    
+
     # auto‐choose output JSON
     out = args.output
     if not out:
@@ -224,11 +238,11 @@ def main():
             out  = os.path.join(os.path.dirname(args.input_path), f"{base}_structures.json")
         else:
             out  = os.path.join(args.input_path, "structures.json")
-    
+
     if os.path.isfile(args.input_path):
-        process_single_image(args.input_path, out, params)
+        process_single_image(args.input_path, out, params, debug_dir=args.debug_dir)
     elif os.path.isdir(args.input_path):
-        process_folder(args.input_path, out, params)
+        process_folder(args.input_path, out, params, debug_dir=args.debug_dir)
     else:
         print(f"Error: {args.input_path} is not valid")
         sys.exit(1)
