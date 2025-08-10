@@ -5,6 +5,8 @@ import json
 import argparse
 from tqdm import tqdm
 from PIL import Image
+import fitz  # PyMuPDF
+import numpy as np
 
 def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
     """
@@ -217,6 +219,114 @@ def draw_detections(image, horizontal_lines=None, rectangles=None):
     
     return debug
 
+def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
+    """
+    Processes a PDF file to detect horizontal lines and rectangles on each page.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        output_json_path: Path where the JSON results will be saved
+        params: Dictionary of parameters for structure detection
+        debug_dir: Optional directory for debug images
+        save_visualization: Whether to save visualization of detected structures
+        
+    Returns:
+        Boolean indicating success or failure
+    """
+    if params is None:
+        params = {}
+
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as e:
+        print(f"Error: Unable to open PDF at {pdf_path}: {e}")
+        return False
+
+    # Get parameters for detection
+    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    max_line_h = params.get('max_line_height', 10)
+    min_rect_area = params.get('min_rect_area_ratio', 0.001)
+    max_rect_area = params.get('max_rect_area_ratio', 0.5)
+
+    # Prepare debug directory if requested
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+
+    pages = []
+    
+    print(f"Processing PDF with {len(doc)} pages")
+    for page_num in tqdm(range(len(doc)), desc="Processing pages"):
+        page = doc.load_page(page_num)
+        
+        # Convert page to image (200 DPI for good quality)
+        mat = fitz.Matrix(200/72, 200/72)  # 72 is default DPI
+        pix = page.get_pixmap(matrix=mat)
+        img_data = pix.tobytes("png")
+        
+        # Convert to numpy array for OpenCV
+        nparr = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            print(f"Warning: Unable to process page {page_num + 1}")
+            continue
+
+        # Create page-specific debug directory if debug_dir is specified
+        page_debug_dir = None
+        if debug_dir:
+            page_debug_dir = os.path.join(debug_dir, f"page_{page_num + 1}")
+            os.makedirs(page_debug_dir, exist_ok=True)
+
+        # Detect structures
+        lines = detect_horizontal_lines(img, min_line_ratio, max_line_h, page_debug_dir)
+        rectangles = detect_rectangles(img, min_rect_area, max_rect_area, page_debug_dir)
+        
+        # Only process pages that have at least 1 horizontal line OR at least 1 rectangle
+        if lines or rectangles:
+            # Create page result
+            page_result = {
+                "page": page_num + 1,
+                "width": img.shape[1],
+                "height": img.shape[0]
+            }
+            
+            # Add structures if they exist
+            if lines:
+                page_result["horizontal_lines"] = lines
+            if rectangles:
+                page_result["rectangles"] = rectangles
+                
+            pages.append(page_result)
+
+        # Save visualization if requested
+        if save_visualization:
+            debug_img = draw_detections(img, lines, rectangles)
+            viz_path = os.path.join(os.path.dirname(output_json_path), 
+                                   f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{page_num + 1}_detected.jpg")
+            cv2.imwrite(viz_path, debug_img)
+
+    doc.close()
+
+    # Create result structure
+    result = {
+        "dpi": {"x": 200, "y": 200},  # We used 200 DPI for rendering
+        "pages": pages,
+        "detection_params": {
+            "min_line_width_ratio": min_line_ratio,
+            "max_line_height": max_line_h,
+            "min_rect_area_ratio": min_rect_area,
+            "max_rect_area_ratio": max_rect_area
+        }
+    }
+
+    # Save result to JSON
+    os.makedirs(os.path.dirname(os.path.abspath(output_json_path)), exist_ok=True)
+    with open(output_json_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=4, ensure_ascii=False)
+    print(f"Saved PDF detection results → {output_json_path}")
+
+    return True
+
 def process_single_image(image_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
     """
     Processes a single image to detect horizontal lines and rectangles.
@@ -398,8 +508,8 @@ def main():
     This function handles the command-line interface for the script, parses arguments,
     and calls the appropriate processing functions.
     """
-    parser = argparse.ArgumentParser(description="Skalu - Detect horizontal lines and rectangles in images")
-    parser.add_argument("input_path", help="Image file or folder")
+    parser = argparse.ArgumentParser(description="Skalu - Detect horizontal lines and rectangles in images and PDFs")
+    parser.add_argument("input_path", help="Image file, PDF file, or folder")
     parser.add_argument("-o", "--output", help="Output JSON file path")
     
     # Line detection parameters
@@ -438,7 +548,11 @@ def main():
             out  = os.path.join(args.input_path, "structures.json")
 
     if os.path.isfile(args.input_path):
-        process_single_image(args.input_path, out, params, debug_dir=args.debug_dir, save_visualization=args.save_viz)
+        # Check if it's a PDF
+        if args.input_path.lower().endswith('.pdf'):
+            process_pdf(args.input_path, out, params, debug_dir=args.debug_dir, save_visualization=args.save_viz)
+        else:
+            process_single_image(args.input_path, out, params, debug_dir=args.debug_dir, save_visualization=args.save_viz)
     elif os.path.isdir(args.input_path):
         process_folder(args.input_path, out, params, debug_dir=args.debug_dir, save_visualization=args.save_viz)
     else:

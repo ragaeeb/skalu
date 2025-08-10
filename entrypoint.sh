@@ -32,6 +32,7 @@ else
     echo "Usage:"
     echo "  docker run skalu all                   # Process all images in /data volume"
     echo "  docker run skalu /data/image.jpg       # Process specific image"
+    echo "  docker run skalu /data/document.pdf       # Process specific document"
     echo "  docker run skalu /custom/folder        # Process all images in custom folder"
     exit 1
 fi
