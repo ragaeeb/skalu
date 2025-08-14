@@ -221,14 +221,13 @@ def draw_detections(image, horizontal_lines=None, rectangles=None):
 
 def round3(value):
     """
-    Rounds a float value to exactly 3 decimal places to match Swift implementation.
+    Rounds a float value to exactly 3 decimal places.
     """
     return round(float(value), 3)
 
 def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
     """
     Processes a PDF file to detect horizontal lines and rectangles on each page.
-    Now matches Swift implementation exactly: CropBox handling, 2x scale, DPI calculation.
     """
     if params is None:
         params = {}
@@ -251,7 +250,7 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
 
     pages = []
     
-    # Variables to track DPI (calculated from first page like Swift)
+    # Variables to track DPI (calculated from first page)
     calculated_dpi_x = None
     calculated_dpi_y = None
     
@@ -259,44 +258,75 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
     for page_num in tqdm(range(len(doc)), desc="Processing pages"):
         page = doc.load_page(page_num)
         
-        # Match Swift logic exactly:
-        # let pageBounds = page.bounds(for: .cropBox)
-        # let effectiveBounds = pageBounds.isEmpty ? page.bounds(for: .mediaBox) : pageBounds
+        # Get bounds
         crop_box = page.cropbox
         media_box = page.mediabox
         
-        # Swift considers cropBox "empty" if it equals mediaBox or has invalid dimensions
-        if (crop_box == media_box or 
-            crop_box.width <= 0 or crop_box.height <= 0 or
-            crop_box.is_empty):
-            effective_bounds = media_box
-        else:
-            effective_bounds = crop_box
+        # Check if cropbox is empty or effectively same as mediabox
+        crop_is_empty = (
+            crop_box.width <= 0 or 
+            crop_box.height <= 0 or
+            crop_box == media_box
+        )
+        
+        effective_bounds = media_box if crop_is_empty else crop_box
         
         print(f"Page {page_num + 1}: MediaBox={media_box}, CropBox={crop_box}, Using={effective_bounds}")
-        
-        # Match Swift exactly: let scale: CGFloat = 2.0
+
         scale = 2.0
         
-        # Match Swift renderSize calculation:
-        # let renderSize = CGSize(
-        #     width: max(1, effectiveBounds.width * scale),
-        #     height: max(1, effectiveBounds.height * scale)
-        # )
+        # Calculate render size
         render_width = max(1, effective_bounds.width * scale)
         render_height = max(1, effective_bounds.height * scale)
         
-        # Create transformation matrix
+        # Use PyMuPDF's get_pixmap
         mat = fitz.Matrix(scale, scale)
         
-        # Apply clipping to effective bounds
-        clip = effective_bounds if effective_bounds != media_box else None
+        # DEBUG: Let's see what's happening with the bounds and clipping
+        #print(f"DEBUG - Scale: {scale}")
+        #print(f"DEBUG - EffectiveBounds: {effective_bounds}")
+        #print(f"DEBUG - Matrix: {mat}")
         
-        # Render the page - this creates the thumbnail equivalent
-        pix = page.get_pixmap(matrix=mat, clip=clip)
-        img_data = pix.tobytes("png")
+        if crop_is_empty:
+            # Use mediabox
+            pix = page.get_pixmap(matrix=mat)
+            #print(f"DEBUG - Using mediabox, no clip")
+        else:
+            # thumbnail(of: renderSize, for: .cropBox) behavior:
+            # 1. Sets the page bounds to cropbox
+            # 2. Renders at the requested size based on effective bounds (cropbox)
+            # 3. Returns image with dimensions matching the renderSize calculation
+            
+            # The key insight: calculates renderSize from effectiveBounds (cropbox)
+            # and then renders the page content to fit that size
+            
+            # Save original cropbox
+            original_cropbox = page.cropbox
+            
+            # Temporarily set the page to use only the crop area
+            page.set_cropbox(crop_box)
+            
+            # Render the page - this should now give us the correct dimensions
+            # because the page bounds are now the cropbox
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Restore original cropbox
+            page.set_cropbox(original_cropbox)
+            
+            #print(f"DEBUG - Using cropbox with set_cropbox method")
+        
+        # Get actual rendered dimensions
+        actual_width = pix.width
+        actual_height = pix.height
+        
+        #print(f"DEBUG - Pixmap irect: {pix.irect}")
+        #print(f"DEBUG - Expected size: {render_width} x {render_height}")
+        #print(f"DEBUG - Actual pixmap size: {actual_width} x {actual_height}")
+        
+        print(f"Render size: {render_width}x{render_height}, Actual: {actual_width}x{actual_height}")
         
         # Convert to numpy array for OpenCV
+        img_data = pix.tobytes("png")
         nparr = np.frombuffer(img_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
@@ -304,22 +334,16 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
             print(f"Warning: Unable to process page {page_num + 1}")
             continue
 
-        # Match Swift DPI calculation exactly (from first page only):
-        # let rawDpiX = Double(cgImg.width)  / (Double(effectiveBounds.width)  / 72.0)
-        # let rawDpiY = Double(cgImg.height) / (Double(effectiveBounds.height) / 72.0)
-        # dpiX = round3(rawDpiX)
-        # dpiY = round3(rawDpiY)
+        # Calculate DPI from first page only
         if calculated_dpi_x is None and calculated_dpi_y is None:
-            raw_dpi_x = float(img.shape[1]) / (float(effective_bounds.width) / 72.0)
-            raw_dpi_y = float(img.shape[0]) / (float(effective_bounds.height) / 72.0)
+            # rawDpiX = Double(cgImg.width) / (Double(effectiveBounds.width) / 72.0)
+            raw_dpi_x = float(actual_width) / (float(effective_bounds.width) / 72.0)
+            raw_dpi_y = float(actual_height) / (float(effective_bounds.height) / 72.0)
             
-            # Use round3 function to match Swift exactly
             calculated_dpi_x = round3(raw_dpi_x)
             calculated_dpi_y = round3(raw_dpi_y)
             
             print(f"Calculated DPI: x={calculated_dpi_x}, y={calculated_dpi_y}")
-            print(f"Image dimensions: {img.shape[1]}×{img.shape[0]}")
-            print(f"Effective bounds: {effective_bounds.width}×{effective_bounds.height}")
 
         # Create page-specific debug directory if debug_dir is specified
         page_debug_dir = None
@@ -333,13 +357,11 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
         
         # Only process pages that have at least 1 horizontal line OR at least 1 rectangle
         if lines or rectangles:
-            # Create page result matching Swift structure:
-            # pageDict["page"] = i + 1
-            # pageDict has "width", "height" from ocrResult
+            # Create page result using actual rendered dimensions
             page_result = {
                 "page": page_num + 1,
-                "width": img.shape[1],   # Match Swift: Int(imageWidth)
-                "height": img.shape[0]   # Match Swift: Int(imageHeight)
+                "width": actual_width,
+                "height": actual_height
             }
             
             # Add structures if they exist
@@ -357,13 +379,12 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
                                    f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{page_num + 1}_detected.jpg")
             cv2.imwrite(viz_path, debug_img)
 
+        # Clean up pixmap
+        pix = None
+
     doc.close()
 
-    # Match Swift output structure exactly:
-    # let pdfOutput: [String: Any] = [
-    #     "pages": pagesArray,
-    #     "dpi": ["x": dpiX, "y": dpiY]
-    # ]
+    # Create result structure
     result = {
         "pages": pages,
         "dpi": {
