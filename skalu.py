@@ -38,38 +38,66 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
     if debug_dir:
         cv2.imwrite(os.path.join(debug_dir, "step_01_gray.png"), gray)
 
-    # -- 2) Global Otsu threshold (inverted) so that black bars -> white
+    # -- 2) Gentle denoising to reduce speckles without blurring edges
+    denoised = cv2.GaussianBlur(gray, (5, 5), 0)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_02_denoised.png"), denoised)
+
+    # -- 3) Global Otsu threshold (inverted) so that black bars -> white
     _, bw_otsu = cv2.threshold(
-        gray,
+        denoised,
         0,
         255,
         cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
     )
     if debug_dir:
-        cv2.imwrite(os.path.join(debug_dir, "step_02_otsu.png"), bw_otsu)
+        cv2.imwrite(os.path.join(debug_dir, "step_03_otsu.png"), bw_otsu)
 
-    # -- 3) Adaptive threshold (inverted), to catch faint lines
+    # -- 4) Adaptive threshold (inverted), to catch faint lines
     bw_adapt = cv2.adaptiveThreshold(
-        gray, 255,
+        denoised, 255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY_INV,
         15,  # block size
         8    # C
     )
     if debug_dir:
-        cv2.imwrite(os.path.join(debug_dir, "step_03_adaptive.png"), bw_adapt)
+        cv2.imwrite(os.path.join(debug_dir, "step_04_adaptive.png"), bw_adapt)
 
-    # -- 4) Union of Otsu + adaptive
+    # -- 5) Union of Otsu + adaptive
     bw = cv2.bitwise_or(bw_otsu, bw_adapt)
     if debug_dir:
-        cv2.imwrite(os.path.join(debug_dir, "step_04_union.png"), bw)
+        cv2.imwrite(os.path.join(debug_dir, "step_05_union.png"), bw)
 
-    # -- 5) Morphological open with a dynamic horizontal kernel
+    # -- 6) Median blur to clean isolated noise while preserving thin bars
+    cleaned = cv2.medianBlur(bw, 3)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_06_cleaned.png"), cleaned)
+
+    # -- 7) Morphological close with a modest horizontal kernel to bridge small gaps
     orig_min_width = int(min_line_width_ratio * w)
     # make the open‐kernel a bit smaller (80%) so broken/faint bars still survive erosion
     open_width = max(int(orig_min_width * 0.8), 1)
+    bridge_width = max(3, int(w * 0.01))
+    bridge_width = min(bridge_width, max(open_width, 3))
+    bridge_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (bridge_width, 1))
+    bridged = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, bridge_kernel, iterations=1)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_07_bridged.png"), bridged)
+
+    # -- 8) Extract longer vertical structures for false-positive suppression
+    vertical_kernel_height = max(5, int(h * 0.02))
+    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, vertical_kernel_height))
+    vertical_mask = cv2.morphologyEx(bridged, cv2.MORPH_OPEN, vertical_kernel, iterations=1)
+    vertical_mask = cv2.dilate(vertical_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_08_vertical.png"), vertical_mask)
+
+    # -- 9) Morphological open with a dynamic horizontal kernel on the bridged image
     horiz_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (open_width, 1))
-    opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, horiz_kern, iterations=1)
+    opened = cv2.morphologyEx(bridged, cv2.MORPH_OPEN, horiz_kern, iterations=1)
+    if debug_dir:
+        cv2.imwrite(os.path.join(debug_dir, "step_09_horizontal_mask.png"), opened)
 
     # … then your usual contour‐find + filter:
     contours, _ = cv2.findContours(
@@ -80,8 +108,41 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
     for c in contours:
         x, y, cw, ch = cv2.boundingRect(c)
         # *still* require the original minimum width
-        if cw >= orig_min_width and ch <= max_line_height:
-            lines.append({"x":x, "y":y, "width":cw, "height":ch})
+        if cw < orig_min_width or ch > max_line_height:
+            continue
+
+        # Ensure the candidate has enough supporting pixels (avoid faint noise)
+        region = bridged[y:y+ch, x:x+cw]
+        pixel_count = cv2.countNonZero(region)
+        if pixel_count == 0:
+            continue
+        fill_ratio = pixel_count / float(cw * ch)
+        if fill_ratio < 0.6:
+            continue
+
+        # Suppress horizontal edges that sit inside rectangles by checking for
+        # strong vertical structures around both ends of the segment.
+        endpoint_pad = max(5, min(30, cw // 8))
+        vertical_pad = max(6, max_line_height * 2)
+
+        y0 = max(0, y - vertical_pad)
+        y1 = min(h, y + ch + vertical_pad)
+
+        left_x0 = max(0, x - endpoint_pad)
+        left_x1 = min(w, x + endpoint_pad)
+        right_x0 = max(0, x + cw - endpoint_pad)
+        right_x1 = min(w, x + cw + endpoint_pad)
+
+        left_roi = vertical_mask[y0:y1, left_x0:left_x1]
+        right_roi = vertical_mask[y0:y1, right_x0:right_x1]
+
+        left_has_vertical = cv2.countNonZero(left_roi) > 0
+        right_has_vertical = cv2.countNonZero(right_roi) > 0
+
+        if left_has_vertical and right_has_vertical:
+            continue
+
+        lines.append({"x":x, "y":y, "width":cw, "height":ch})
 
     lines.sort(key=lambda L: L["y"])
     return lines
