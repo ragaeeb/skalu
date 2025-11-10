@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Skalu Demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #f5f5f5;
+        color: #1b1b1b;
+        display: flex;
+        min-height: 100vh;
+      }
+      .container {
+        margin: auto;
+        width: min(960px, 90vw);
+        background: white;
+        padding: 2.5rem;
+        border-radius: 16px;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: clamp(2rem, 5vw, 2.75rem);
+      }
+      p.description {
+        margin-top: 0;
+        margin-bottom: 1.5rem;
+        color: #4a4a4a;
+      }
+      form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 1.5rem;
+      }
+      input[type="file"] {
+        flex: 1 1 280px;
+      }
+      button {
+        padding: 0.75rem 1.5rem;
+        font-size: 1rem;
+        border-radius: 999px;
+        border: none;
+        cursor: pointer;
+        background: linear-gradient(135deg, #2a4b8d, #5f8df1);
+        color: white;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      button:hover,
+      button:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(47, 82, 168, 0.25);
+      }
+      .messages {
+        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        background: #ffe6e6;
+        color: #8c1a1a;
+      }
+      .result-card {
+        margin-top: 1.5rem;
+        padding: 1.5rem;
+        background: #f7f9fc;
+        border-radius: 12px;
+        border: 1px solid rgba(42, 75, 141, 0.12);
+      }
+      .result-card h2 {
+        margin-top: 0;
+      }
+      pre {
+        max-height: 420px;
+        overflow: auto;
+        padding: 1rem;
+        background: #10162f;
+        color: #e6edf7;
+        border-radius: 12px;
+        font-size: 0.9rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1.5rem;
+      }
+      th, td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      }
+      th {
+        background: rgba(42, 75, 141, 0.08);
+      }
+      .params {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+      }
+      .chip {
+        padding: 0.5rem 0.75rem;
+        border-radius: 999px;
+        background: rgba(42, 75, 141, 0.12);
+      }
+      footer {
+        margin-top: 2rem;
+        font-size: 0.85rem;
+        color: #6f6f6f;
+        text-align: center;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #0b101b;
+          color: #e6edf7;
+        }
+        .container {
+          background: #111b2e;
+          box-shadow: none;
+        }
+        p.description {
+          color: #9ba7c0;
+        }
+        .result-card {
+          background: #0c1322;
+          border-color: rgba(95, 141, 241, 0.2);
+        }
+        pre {
+          background: #070b14;
+          color: #d6def5;
+        }
+        table th {
+          background: rgba(95, 141, 241, 0.1);
+        }
+        .messages {
+          background: rgba(255, 118, 118, 0.12);
+          color: #ff8888;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Skalu Structure Detector</h1>
+      <p class="description">Upload a PDF or image to detect horizontal lines and rectangles. The detected structures will be displayed as JSON output below.</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="messages">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept="application/pdf,image/*" required>
+        <button type="submit">Analyze</button>
+      </form>
+
+      {% if summary %}
+        <div class="result-card">
+          <h2>Summary for {{ processed_filename }}</h2>
+          {% if summary.type == 'image' %}
+            <table>
+              <thead>
+                <tr>
+                  <th>Image</th>
+                  <th>Horizontal Lines</th>
+                  <th>Rectangles</th>
+                  <th>Dimensions (px)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in summary.items %}
+                  <tr>
+                    <td>{{ item.name }}</td>
+                    <td>{{ item.lines }}</td>
+                    <td>{{ item.rectangles }}</td>
+                    <td>{{ item.dimensions[0] }} × {{ item.dimensions[1] }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% elif summary.type == 'pdf' %}
+            <table>
+              <thead>
+                <tr>
+                  <th>Page</th>
+                  <th>Horizontal Lines</th>
+                  <th>Rectangles</th>
+                  <th>Size (px)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for page in summary.pages %}
+                  <tr>
+                    <td>{{ page.page }}</td>
+                    <td>{{ page.lines }}</td>
+                    <td>{{ page.rectangles }}</td>
+                    <td>{{ page.size[0] }} × {{ page.size[1] }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+
+          {% if detection_params %}
+            <h3>Detection Parameters</h3>
+            <div class="params">
+              {% for key, value in detection_params.items() %}
+                <div class="chip">{{ key }}: {{ value }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if result_json %}
+        <div class="result-card">
+          <h2>Raw JSON Output</h2>
+          <pre>{{ result_json | safe }}</pre>
+        </div>
+      {% endif %}
+
+      <footer>
+        Ready for deployment on <strong>Render</strong>. Configure your service to run <code>gunicorn app:app</code> after installing dependencies with <code>pip install -r requirements.txt</code>.
+      </footer>
+    </div>
+  </body>
+</html>
