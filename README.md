@@ -68,8 +68,14 @@ The default configuration limits uploads to 25&nbsp;MB to keep the demo responsi
 # Build the Docker image
 docker build -t skalu .
 
-# Run the container with your images
-docker run -v /path/to/your/images:/data skalu /data
+# Start the web demo on http://localhost:10000
+docker run -p 10000:10000 skalu
+
+# Run the batch processor against a mounted volume
+docker run -v /path/to/your/images:/data skalu all
+
+# Process a single file inside the container
+docker run -v /path/to/your/file.pdf:/data/file.pdf skalu /data/file.pdf
 ```
 
 ## Usage
