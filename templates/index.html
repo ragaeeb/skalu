@@ -953,7 +953,9 @@
       }
 
       function buildParamsMarkup(params) {
-        const chips = Object.entries(params).map(([key, value]) => `<div class="chip">${escapeHtml(key)}: ${value}</div>`).join('');
+        const chips = Object.entries(params)
+          .map(([key, value]) => `<div class="chip">${escapeHtml(key)}: ${escapeHtml(value)}</div>`)
+          .join('');
         return `
           <h2><span>Config</span>Detection parameters</h2>
           <p class="lead-in">These thresholds and ratios were applied while scanning your document.</p>
