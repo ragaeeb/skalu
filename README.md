@@ -28,6 +28,9 @@ Skalu is a Python tool for detecting horizontal lines and rectangles in images a
 
 You can explore Skalu through a lightweight Flask web demo that accepts PDF and image uploads and shows the detected rectangles and horizontal lines.
 
+- **Real-time feedback** – uploads run asynchronously so the page displays live progress as each page is analyzed.
+- **Inline insights** – once finished, the app renders summaries, visualizations, debug frames, and a downloadable JSON payload without refreshing the page.
+
 ### Run the demo locally
 
 ```bash
@@ -44,7 +47,7 @@ Then open <http://127.0.0.1:5000> in your browser, upload a document, and review
 3. When prompted, enable the **Auto-detect settings from render.yaml** option.
 4. Deploy. Render will run `pip install -r requirements.txt` and start the server with `gunicorn app:app`.
 
-The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files.
+The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
 
 ## Installation
 

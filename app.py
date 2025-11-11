@@ -2,10 +2,13 @@ import base64
 import json
 import os
 import re
+import shutil
 import tempfile
+import threading
+import uuid
 from typing import Dict, List, Optional
 
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.utils import secure_filename
 
 from skalu import process_pdf, process_single_image
@@ -21,22 +24,14 @@ DEFAULT_PARAMS = {
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "skalu-demo-secret")
-# Limit uploads to 25 MB by default to keep demo responsive.
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", 25 * 1024 * 1024))
+
+_jobs: Dict[str, Dict] = {}
+_jobs_lock = threading.Lock()
 
 
 def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def load_results_from_path(path: str) -> Optional[dict]:
-    try:
-        with open(path, "r", encoding="utf-8") as file:
-            return json.load(file)
-    except (OSError, json.JSONDecodeError) as exc:
-        app.logger.exception("Failed to load results from %s", path)
-        flash(f"Unable to load detection results: {exc}", "error")
-        return None
 
 
 def build_summary(data: dict) -> Optional[dict]:
@@ -48,26 +43,30 @@ def build_summary(data: dict) -> Optional[dict]:
         for name, info in data["result"].items():
             lines = len(info.get("horizontal_lines", []))
             rectangles = len(info.get("rectangles", []))
-            items.append({
-                "name": name,
-                "lines": lines,
-                "rectangles": rectangles,
-                "dimensions": (
-                    info.get("dpi", {}).get("width"),
-                    info.get("dpi", {}).get("height"),
-                ),
-            })
+            items.append(
+                {
+                    "name": name,
+                    "lines": lines,
+                    "rectangles": rectangles,
+                    "dimensions": (
+                        info.get("dpi", {}).get("width"),
+                        info.get("dpi", {}).get("height"),
+                    ),
+                }
+            )
         return {"type": "image", "items": items}
 
     if "pages" in data:
         pages = []
         for page in data["pages"]:
-            pages.append({
-                "page": page.get("page"),
-                "lines": len(page.get("horizontal_lines", [])),
-                "rectangles": len(page.get("rectangles", [])),
-                "size": (page.get("width"), page.get("height")),
-            })
+            pages.append(
+                {
+                    "page": page.get("page"),
+                    "lines": len(page.get("horizontal_lines", [])),
+                    "rectangles": len(page.get("rectangles", [])),
+                    "size": (page.get("width"), page.get("height")),
+                }
+            )
         return {"type": "pdf", "pages": pages}
 
     return None
@@ -166,86 +165,217 @@ def collect_debug_groups(debug_dir: str) -> List[Dict[str, List[Dict[str, str]]]
     return groups
 
 
-@app.route("/", methods=["GET", "POST"])
+def _job_progress_message(done: int, total: int, suffix: str) -> str:
+    if total:
+        if suffix == ".pdf":
+            if done >= total:
+                return f"Finished all {total} pages"
+            next_page = min(done + 1, total)
+            return f"Processing page {next_page} of {total}"
+        if done >= total:
+            return "Processing complete"
+        return f"Processed {done} of {total} items"
+    if suffix == ".pdf":
+        return "Preparing pages"
+    return "Processing image"
+
+
+def _process_job(job_id: str, suffix: str) -> None:
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return
+
+    workdir = job["workdir"]
+    filename = job["filename"]
+    input_path = os.path.join(workdir, filename)
+    output_json_path = os.path.join(workdir, "results.json")
+    debug_dir = os.path.join(workdir, "debug")
+
+    def progress_callback(done: int, total: int) -> None:
+        with job["lock"]:
+            job["processed"] = done
+            job["total"] = total
+            job["status"] = "processing"
+            job["message"] = _job_progress_message(done, total, suffix)
+
+    try:
+        with job["lock"]:
+            job["status"] = "processing"
+            job["message"] = "Starting analysis"
+
+        if suffix == ".pdf":
+            success = process_pdf(
+                input_path,
+                output_json_path,
+                params=DEFAULT_PARAMS,
+                debug_dir=debug_dir,
+                save_visualization=True,
+                progress_callback=progress_callback,
+            )
+        else:
+            success = process_single_image(
+                input_path,
+                output_json_path,
+                params=DEFAULT_PARAMS,
+                debug_dir=debug_dir,
+                save_visualization=True,
+                progress_callback=progress_callback,
+            )
+
+        if not success:
+            raise RuntimeError("Processing failed. Please try another file.")
+
+        with open(output_json_path, "r", encoding="utf-8") as file:
+            result_data = json.load(file)
+
+        result_json = json.dumps(result_data, indent=4, ensure_ascii=False)
+        summary = build_summary(result_data)
+        debug_groups = collect_debug_groups(debug_dir)
+        visualizations = collect_visualizations(workdir)
+        download_filename = f"{os.path.splitext(filename)[0]}_results.json"
+        detection_params = result_data.get("detection_params")
+
+        payload = {
+            "result_json": result_json,
+            "result_data": result_data,
+            "summary": summary,
+            "processed_filename": filename,
+            "detection_params": detection_params,
+            "debug_groups": debug_groups,
+            "visualizations": visualizations,
+            "download_filename": download_filename,
+        }
+
+        with job["lock"]:
+            job["status"] = "finished"
+            job["processed"] = job.get("total", 0) or job.get("processed", 0)
+            job["message"] = "Processing complete"
+            job["result"] = payload
+    except Exception as exc:  # pylint: disable=broad-except
+        app.logger.exception("Job %s failed", job_id)
+        with job["lock"]:
+            job["status"] = "error"
+            job["error"] = str(exc)
+            job["message"] = f"Failed: {exc}"
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+        with job["lock"]:
+            job["workdir"] = None
+
+
+@app.route("/", methods=["GET"])
 def index():
-    result_json = None
-    result_data = None
-    summary = None
-    processed_filename = None
-    debug_groups = []
-    visualizations = []
-    download_filename = None
+    return render_template("index.html")
 
-    if request.method == "POST":
-        uploaded_file = request.files.get("file")
 
-        if not uploaded_file or uploaded_file.filename == "":
-            flash("Please choose a PDF or image file to analyze.", "error")
-            return redirect(url_for("index"))
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    uploaded_file = request.files.get("file")
+    if not uploaded_file or uploaded_file.filename == "":
+        return jsonify({"error": "Please choose a PDF or image file to analyze."}), 400
 
-        filename = secure_filename(uploaded_file.filename)
-        if not allowed_file(filename):
-            flash("Unsupported file type. Please upload a PDF or common image format.", "error")
-            return redirect(url_for("index"))
+    filename = secure_filename(uploaded_file.filename)
+    if not allowed_file(filename):
+        return jsonify({"error": "Unsupported file type. Please upload a PDF or common image format."}), 400
 
-        suffix = os.path.splitext(filename)[1].lower()
+    suffix = os.path.splitext(filename)[1].lower()
 
-        params = DEFAULT_PARAMS.copy()
+    try:
+        workdir = tempfile.mkdtemp(prefix="skalu_job_")
+    except Exception as exc:  # pylint: disable=broad-except
+        app.logger.exception("Failed to allocate workspace")
+        return jsonify({"error": f"Unable to prepare workspace: {exc}"}), 500
 
-        try:
-            with tempfile.TemporaryDirectory() as workdir:
-                input_path = os.path.join(workdir, filename)
-                uploaded_file.save(input_path)
+    input_path = os.path.join(workdir, filename)
+    try:
+        uploaded_file.save(input_path)
+    except Exception as exc:  # pylint: disable=broad-except
+        app.logger.exception("Failed to save upload")
+        shutil.rmtree(workdir, ignore_errors=True)
+        return jsonify({"error": f"Unable to save uploaded file: {exc}"}), 500
 
-                output_json_path = os.path.join(workdir, "results.json")
-                debug_dir = os.path.join(workdir, "debug")
+    job_id = uuid.uuid4().hex
+    job = {
+        "id": job_id,
+        "filename": filename,
+        "status": "queued",
+        "processed": 0,
+        "total": 0,
+        "message": "Queued",
+        "error": None,
+        "result": None,
+        "download_filename": None,
+        "workdir": workdir,
+        "lock": threading.Lock(),
+    }
 
-                if suffix == ".pdf":
-                    success = process_pdf(
-                        input_path,
-                        output_json_path,
-                        params=params,
-                        debug_dir=debug_dir,
-                        save_visualization=True,
-                    )
-                else:
-                    success = process_single_image(
-                        input_path,
-                        output_json_path,
-                        params=params,
-                        debug_dir=debug_dir,
-                        save_visualization=True,
-                    )
+    with _jobs_lock:
+        _jobs[job_id] = job
 
-                if not success:
-                    flash("Processing failed. Please try another file.", "error")
-                    return redirect(url_for("index"))
+    thread = threading.Thread(target=_process_job, args=(job_id, suffix), daemon=True)
+    thread.start()
 
-                result_data = load_results_from_path(output_json_path)
-                if result_data is None:
-                    return redirect(url_for("index"))
+    return jsonify({"job_id": job_id})
 
-                result_json = json.dumps(result_data, indent=4, ensure_ascii=False)
-                summary = build_summary(result_data)
-                processed_filename = filename
-                debug_groups = collect_debug_groups(debug_dir)
-                visualizations = collect_visualizations(workdir)
-                download_filename = f"{os.path.splitext(filename)[0]}_results.json"
-        except Exception as exc:  # pylint: disable=broad-except
-            app.logger.exception("Error while processing upload")
-            flash(f"An unexpected error occurred: {exc}", "error")
-            return redirect(url_for("index"))
 
-    return render_template(
-        "index.html",
-        result_json=result_json,
-        result_data=result_data,
-        summary=summary,
-        processed_filename=processed_filename,
-        detection_params=result_data.get("detection_params") if result_data else None,
-        debug_groups=debug_groups,
-        visualizations=visualizations,
-        download_filename=download_filename,
+@app.route("/progress/<job_id>", methods=["GET"])
+def progress(job_id: str):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Unknown job"}), 404
+
+    with job["lock"]:
+        response = {
+            "status": job["status"],
+            "processed": job.get("processed", 0),
+            "total": job.get("total", 0),
+            "message": job.get("message"),
+            "filename": job.get("filename"),
+        }
+        if job["status"] == "error":
+            response["error"] = job.get("error")
+        response["result_ready"] = job.get("status") == "finished"
+    return jsonify(response)
+
+
+@app.route("/results/<job_id>", methods=["GET"])
+def results(job_id: str):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Unknown job"}), 404
+
+    with job["lock"]:
+        if job["status"] != "finished" or not job.get("result"):
+            if job["status"] == "error":
+                return jsonify({"error": job.get("error", "Processing failed")}), 400
+            return jsonify({"error": "Results not ready"}), 202
+
+        payload = job["result"].copy()
+    return jsonify(payload)
+
+
+@app.route("/download/<job_id>", methods=["GET"])
+def download(job_id: str):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Unknown job"}), 404
+
+    with job["lock"]:
+        if job["status"] != "finished" or not job.get("result"):
+            if job["status"] == "error":
+                return jsonify({"error": job.get("error", "Processing failed")}), 400
+            return jsonify({"error": "Results not ready"}), 202
+        result_json = job["result"].get("result_json")
+        download_filename = job["result"].get("download_filename") or "results.json"
+
+    return Response(
+        result_json or "{}",
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={download_filename}"},
     )
 
 

@@ -62,12 +62,52 @@
         transform: translateY(-1px);
         box-shadow: 0 12px 24px rgba(47, 82, 168, 0.25);
       }
+      button[disabled] {
+        opacity: 0.65;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
       .messages {
         margin-bottom: 1rem;
         padding: 0.75rem 1rem;
         border-radius: 12px;
         background: #ffe6e6;
         color: #8c1a1a;
+        display: none;
+      }
+      .messages.show {
+        display: block;
+      }
+      .status-card {
+        padding: 1rem 1.25rem;
+        border-radius: 12px;
+        background: #edf2ff;
+        color: #1a2b5c;
+        border: 1px solid rgba(42, 75, 141, 0.18);
+        display: none;
+        margin-bottom: 1.5rem;
+      }
+      .status-card.show {
+        display: block;
+      }
+      .status-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: center;
+      }
+      .progress {
+        margin-top: 0.75rem;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(42, 75, 141, 0.2);
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        width: 0;
+        background: linear-gradient(135deg, #2a4b8d, #5f8df1);
+        transition: width 0.3s ease;
       }
       .result-card {
         margin-top: 1.5rem;
@@ -75,6 +115,10 @@
         background: #f7f9fc;
         border-radius: 12px;
         border: 1px solid rgba(42, 75, 141, 0.12);
+        display: none;
+      }
+      .result-card.show {
+        display: block;
       }
       .result-card h2 {
         margin-top: 0;
@@ -180,31 +224,274 @@
           background: rgba(255, 118, 118, 0.12);
           color: #ff8888;
         }
+        .status-card {
+          background: rgba(95, 141, 241, 0.16);
+          color: #dce7ff;
+          border-color: rgba(95, 141, 241, 0.4);
+        }
+        .progress {
+          background: rgba(95, 141, 241, 0.28);
+        }
       }
     </style>
   </head>
   <body>
     <div class="container">
       <h1>Skalu Structure Detector</h1>
-      <p class="description">Upload a PDF or image to detect horizontal lines and rectangles. The detected structures will be displayed as JSON output below.</p>
+      <p class="description">Upload a PDF or image to detect horizontal lines and rectangles. The detected structures will be displayed with real-time progress updates.</p>
 
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            <div class="messages">{{ message }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
+      <div id="error" class="messages"></div>
 
-      <form method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept="application/pdf,image/*" required>
-        <button type="submit">Analyze</button>
+      <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" name="file" id="file-input" accept="application/pdf,image/*" required>
+        <button type="submit" id="analyze-button">Analyze</button>
       </form>
 
-      {% if summary %}
-        <div class="result-card">
-          <h2>Summary for {{ processed_filename }}</h2>
-          {% if summary.type == 'image' %}
+      <div id="status-card" class="status-card">
+        <div class="status-header">
+          <strong id="status-filename">Waiting for upload…</strong>
+          <span id="status-message"></span>
+        </div>
+        <div class="progress" aria-hidden="true">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <section id="summary-card" class="result-card"></section>
+      <section id="params-card" class="result-card"></section>
+      <section id="json-card" class="result-card"></section>
+      <section id="viz-card" class="result-card"></section>
+      <section id="debug-card" class="result-card"></section>
+
+      <footer>
+        Ready for deployment on <strong>Render</strong>. Configure your service to run <code>gunicorn app:app</code> after installing dependencies with <code>pip install -r requirements.txt</code>.
+      </footer>
+    </div>
+
+    <script>
+      const form = document.getElementById('upload-form');
+      const fileInput = document.getElementById('file-input');
+      const analyzeButton = document.getElementById('analyze-button');
+      const errorBox = document.getElementById('error');
+      const statusCard = document.getElementById('status-card');
+      const statusFilename = document.getElementById('status-filename');
+      const statusMessage = document.getElementById('status-message');
+      const progressFill = document.getElementById('progress-fill');
+      const summaryCard = document.getElementById('summary-card');
+      const paramsCard = document.getElementById('params-card');
+      const jsonCard = document.getElementById('json-card');
+      const vizCard = document.getElementById('viz-card');
+      const debugCard = document.getElementById('debug-card');
+
+      let currentJobId = null;
+      let pollTimer = null;
+      let currentResult = null;
+
+      function resetView() {
+        hideError();
+        if (pollTimer) {
+          window.clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        currentJobId = null;
+        [summaryCard, paramsCard, jsonCard, vizCard, debugCard].forEach(section => {
+          section.classList.remove('show');
+          section.innerHTML = '';
+        });
+        statusCard.classList.remove('show');
+        progressFill.style.width = '0%';
+        statusMessage.textContent = '';
+        statusFilename.textContent = 'Waiting for upload…';
+        currentResult = null;
+        analyzeButton.disabled = false;
+      }
+
+      function showError(message) {
+        errorBox.textContent = message;
+        errorBox.classList.add('show');
+      }
+
+      function hideError() {
+        errorBox.classList.remove('show');
+        errorBox.textContent = '';
+      }
+
+      async function startAnalysis(event) {
+        event.preventDefault();
+        resetView();
+        hideError();
+
+        if (!fileInput.files || fileInput.files.length === 0) {
+          showError('Please choose a PDF or image file to analyze.');
+          return;
+        }
+
+        analyzeButton.disabled = true;
+        statusCard.classList.add('show');
+        statusFilename.textContent = fileInput.files[0].name;
+        statusMessage.textContent = 'Uploading…';
+        progressFill.style.width = '5%';
+
+        try {
+          const formData = new FormData(form);
+          const response = await fetch('/analyze', {
+            method: 'POST',
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Failed to start analysis.');
+          }
+
+          const payload = await response.json();
+          currentJobId = payload.job_id;
+          statusMessage.textContent = 'Queued';
+          progressFill.style.width = '10%';
+
+          pollTimer = window.setInterval(() => checkProgress(currentJobId), 1000);
+          await checkProgress(currentJobId);
+        } catch (err) {
+          showError(err.message || 'Unexpected error.');
+          analyzeButton.disabled = false;
+          statusCard.classList.remove('show');
+        }
+      }
+
+      async function checkProgress(jobId) {
+        if (!jobId) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/progress/${jobId}`);
+          if (!response.ok) {
+            throw new Error('Unable to fetch progress.');
+          }
+          const payload = await response.json();
+
+          statusMessage.textContent = payload.message || 'Processing…';
+          statusFilename.textContent = payload.filename || statusFilename.textContent;
+
+          if (payload.total && payload.total > 0) {
+            const percent = Math.min(100, Math.max(0, Math.round((payload.processed / payload.total) * 100)));
+            progressFill.style.width = `${percent}%`;
+          } else {
+            progressFill.style.width = '30%';
+          }
+
+          if (payload.status === 'error') {
+            throw new Error(payload.error || 'Processing failed.');
+          }
+
+          if (payload.result_ready) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+            await fetchResults(jobId);
+          }
+        } catch (err) {
+          if (pollTimer) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+          }
+          showError(err.message || 'Unexpected error while tracking progress.');
+          analyzeButton.disabled = false;
+          statusMessage.textContent = 'Failed';
+          progressFill.style.width = '0%';
+        }
+      }
+
+      async function fetchResults(jobId) {
+        try {
+          const response = await fetch(`/results/${jobId}`);
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Unable to fetch results.');
+          }
+
+          const payload = await response.json();
+          renderResults(payload);
+          analyzeButton.disabled = false;
+          progressFill.style.width = '100%';
+          statusMessage.textContent = 'Processing complete';
+        } catch (err) {
+          showError(err.message || 'Unable to fetch results.');
+          analyzeButton.disabled = false;
+        }
+      }
+
+      function renderResults(data) {
+        currentResult = data;
+
+        if (data.summary) {
+          summaryCard.classList.add('show');
+          summaryCard.innerHTML = buildSummaryMarkup(data.summary, data.processed_filename);
+        }
+
+        if (data.detection_params) {
+          paramsCard.classList.add('show');
+          paramsCard.innerHTML = buildParamsMarkup(data.detection_params);
+        }
+
+        if (data.result_json) {
+          jsonCard.classList.add('show');
+          jsonCard.innerHTML = `
+            <h2>Raw JSON Output</h2>
+            <div class="actions">
+              <button type="button" class="button-secondary" id="download-button">Download JSON</button>
+            </div>
+            <pre>${escapeHtml(data.result_json)}</pre>
+          `;
+          const downloadButton = document.getElementById('download-button');
+          downloadButton.addEventListener('click', downloadResults);
+        }
+
+        if (Array.isArray(data.visualizations) && data.visualizations.length > 0) {
+          vizCard.classList.add('show');
+          vizCard.innerHTML = `
+            <h2>Detections Preview</h2>
+            <div class="image-grid">
+              ${data.visualizations.map(viz => `
+                <figure class="image-card">
+                  <img src="${viz.data_url}" alt="${escapeHtml(viz.label)}">
+                  <figcaption>${escapeHtml(viz.label)}</figcaption>
+                </figure>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        if (Array.isArray(data.debug_groups) && data.debug_groups.length > 0) {
+          debugCard.classList.add('show');
+          debugCard.innerHTML = `
+            <h2>Debug Steps</h2>
+            ${data.debug_groups.map(group => `
+              <h3>${escapeHtml(group.title)}</h3>
+              <div class="image-grid">
+                ${group.images.map(image => `
+                  <figure class="image-card">
+                    <img src="${image.data_url}" alt="${escapeHtml(image.name)}">
+                    <figcaption>${escapeHtml(image.name)}</figcaption>
+                  </figure>
+                `).join('')}
+              </div>
+            `).join('')}
+          `;
+        }
+      }
+
+      function buildSummaryMarkup(summary, filename) {
+        if (summary.type === 'image') {
+          const rows = summary.items.map(item => `
+            <tr>
+              <td>${escapeHtml(item.name)}</td>
+              <td>${item.lines}</td>
+              <td>${item.rectangles}</td>
+              <td>${item.dimensions && item.dimensions[0] && item.dimensions[1] ? `${item.dimensions[0]} × ${item.dimensions[1]}` : '—'}</td>
+            </tr>
+          `).join('');
+          return `
+            <h2>Summary for ${escapeHtml(filename || 'image')}</h2>
             <table>
               <thead>
                 <tr>
@@ -214,18 +501,22 @@
                   <th>Dimensions (px)</th>
                 </tr>
               </thead>
-              <tbody>
-                {% for item in summary.items %}
-                  <tr>
-                    <td>{{ item.name }}</td>
-                    <td>{{ item.lines }}</td>
-                    <td>{{ item.rectangles }}</td>
-                    <td>{{ item.dimensions[0] }} × {{ item.dimensions[1] }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
+              <tbody>${rows}</tbody>
             </table>
-          {% elif summary.type == 'pdf' %}
+          `;
+        }
+
+        if (summary.type === 'pdf') {
+          const rows = summary.pages.map(page => `
+            <tr>
+              <td>${page.page}</td>
+              <td>${page.lines}</td>
+              <td>${page.rectangles}</td>
+              <td>${page.size && page.size[0] && page.size[1] ? `${page.size[0]} × ${page.size[1]}` : '—'}</td>
+            </tr>
+          `).join('');
+          return `
+            <h2>Summary for ${escapeHtml(filename || 'document')}</h2>
             <table>
               <thead>
                 <tr>
@@ -235,92 +526,49 @@
                   <th>Size (px)</th>
                 </tr>
               </thead>
-              <tbody>
-                {% for page in summary.pages %}
-                  <tr>
-                    <td>{{ page.page }}</td>
-                    <td>{{ page.lines }}</td>
-                    <td>{{ page.rectangles }}</td>
-                    <td>{{ page.size[0] }} × {{ page.size[1] }}</td>
-                  </tr>
-                {% endfor %}
-              </tbody>
+              <tbody>${rows}</tbody>
             </table>
-          {% endif %}
+          `;
+        }
 
-          {% if detection_params %}
-            <h3>Detection Parameters</h3>
-            <div class="params">
-              {% for key, value in detection_params.items() %}
-                <div class="chip">{{ key }}: {{ value }}</div>
-              {% endfor %}
-            </div>
-          {% endif %}
-        </div>
-      {% endif %}
+        return '';
+      }
 
-      {% if result_json %}
-        <div class="result-card">
-          <h2>Raw JSON Output</h2>
-          <div class="actions">
-            <button type="button" class="button-secondary" onclick="downloadResults()">Download JSON</button>
-          </div>
-          <pre>{{ result_json | safe }}</pre>
-        </div>
-      {% endif %}
+      function buildParamsMarkup(params) {
+        const chips = Object.entries(params).map(([key, value]) => `<div class="chip">${escapeHtml(key)}: ${value}</div>`).join('');
+        return `
+          <h2>Detection Parameters</h2>
+          <div class="params">${chips}</div>
+        `;
+      }
 
-      {% if visualizations %}
-        <div class="result-card">
-          <h2>Detections Preview</h2>
-          <div class="image-grid">
-            {% for viz in visualizations %}
-              <figure class="image-card">
-                <img src="{{ viz.data_url }}" alt="{{ viz.label }}">
-                <figcaption>{{ viz.label }}</figcaption>
-              </figure>
-            {% endfor %}
-          </div>
-        </div>
-      {% endif %}
-
-      {% if debug_groups %}
-        <div class="result-card">
-          <h2>Debug Steps</h2>
-          {% for group in debug_groups %}
-            <h3>{{ group.title }}</h3>
-            <div class="image-grid">
-              {% for image in group.images %}
-                <figure class="image-card">
-                  <img src="{{ image.data_url }}" alt="{{ image.name }}">
-                  <figcaption>{{ image.name }}</figcaption>
-                </figure>
-              {% endfor %}
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-
-      <footer>
-        Ready for deployment on <strong>Render</strong>. Configure your service to run <code>gunicorn app:app</code> after installing dependencies with <code>pip install -r requirements.txt</code>.
-      </footer>
-    </div>
-    {% if result_json %}
-    <script>
-      const DOWNLOAD_JSON = {{ result_json | tojson }};
-      const DOWNLOAD_FILENAME = {{ (download_filename or 'results.json') | tojson }};
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
 
       function downloadResults() {
-        const blob = new Blob([DOWNLOAD_JSON], { type: 'application/json' });
+        if (!currentResult || !currentResult.result_json) {
+          return;
+        }
+        const blob = new Blob([currentResult.result_json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
+        const filename = currentResult.download_filename || 'results.json';
         anchor.href = url;
-        anchor.download = DOWNLOAD_FILENAME;
+        anchor.download = filename;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
         URL.revokeObjectURL(url);
       }
+
+      form.addEventListener('submit', startAnalysis);
+      fileInput.addEventListener('change', resetView);
     </script>
-    {% endif %}
   </body>
 </html>
