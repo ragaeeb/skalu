@@ -54,6 +54,9 @@
         color: white;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
+      .button-secondary {
+        background: linear-gradient(135deg, #394151, #5b708f);
+      }
       button:hover,
       button:focus {
         transform: translateY(-1px);
@@ -98,6 +101,36 @@
       th {
         background: rgba(42, 75, 141, 0.08);
       }
+      .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+      .image-card {
+        background: #fff;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(42, 75, 141, 0.12);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+      }
+      .image-card img {
+        width: 100%;
+        height: auto;
+        border-radius: 8px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+      }
+      .image-card figcaption {
+        font-size: 0.85rem;
+        color: #4a4a4a;
+        text-align: center;
+      }
+      .actions {
+        margin-bottom: 1rem;
+      }
       .params {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -136,6 +169,12 @@
         }
         table th {
           background: rgba(95, 141, 241, 0.1);
+        }
+        .image-card {
+          background: #0c1322;
+        }
+        .image-card figcaption {
+          color: #9ba7c0;
         }
         .messages {
           background: rgba(255, 118, 118, 0.12);
@@ -223,7 +262,41 @@
       {% if result_json %}
         <div class="result-card">
           <h2>Raw JSON Output</h2>
+          <div class="actions">
+            <button type="button" class="button-secondary" onclick="downloadResults()">Download JSON</button>
+          </div>
           <pre>{{ result_json | safe }}</pre>
+        </div>
+      {% endif %}
+
+      {% if visualizations %}
+        <div class="result-card">
+          <h2>Detections Preview</h2>
+          <div class="image-grid">
+            {% for viz in visualizations %}
+              <figure class="image-card">
+                <img src="{{ viz.data_url }}" alt="{{ viz.label }}">
+                <figcaption>{{ viz.label }}</figcaption>
+              </figure>
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      {% if debug_groups %}
+        <div class="result-card">
+          <h2>Debug Steps</h2>
+          {% for group in debug_groups %}
+            <h3>{{ group.title }}</h3>
+            <div class="image-grid">
+              {% for image in group.images %}
+                <figure class="image-card">
+                  <img src="{{ image.data_url }}" alt="{{ image.name }}">
+                  <figcaption>{{ image.name }}</figcaption>
+                </figure>
+              {% endfor %}
+            </div>
+          {% endfor %}
         </div>
       {% endif %}
 
@@ -231,5 +304,23 @@
         Ready for deployment on <strong>Render</strong>. Configure your service to run <code>gunicorn app:app</code> after installing dependencies with <code>pip install -r requirements.txt</code>.
       </footer>
     </div>
+    {% if result_json %}
+    <script>
+      const DOWNLOAD_JSON = {{ result_json | tojson }};
+      const DOWNLOAD_FILENAME = {{ (download_filename or 'results.json') | tojson }};
+
+      function downloadResults() {
+        const blob = new Blob([DOWNLOAD_JSON], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = DOWNLOAD_FILENAME;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+      }
+    </script>
+    {% endif %}
   </body>
 </html>

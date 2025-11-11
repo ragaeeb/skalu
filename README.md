@@ -35,7 +35,7 @@ pip install -r requirements.txt
 FLASK_APP=app.py flask run
 ```
 
-Then open <http://127.0.0.1:5000> in your browser, upload a document, and review the JSON output directly in the page.
+Then open <http://127.0.0.1:5000> in your browser, upload a document, and review the JSON output directly in the page. The demo now renders annotated visualizations, surfaces the intermediate debug frames when available, and lets you download the structured results as a JSON file with one click.
 
 ### Deploy to Render
 
