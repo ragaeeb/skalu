@@ -49,6 +49,22 @@ Then open <http://127.0.0.1:5000> in your browser, upload a document, and review
 
 The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
 
+### Deploy to Streamlit Cloud
+
+You can ship the same experience to [Streamlit Community Cloud](https://streamlit.io/cloud) with the dedicated `streamlit_app.py` entry point.
+
+1. Add this repository to Streamlit Cloud and choose **streamlit_app.py** as the app file.
+2. Make sure the environment installs the `requirements.txt` dependencies (Streamlit will do this automatically).
+3. Once deployed, the UI mirrors the Render demo: upload a PDF or image, watch live progress, review inline visualizations/debug frames, and download the JSON results.
+
+To try it locally, run:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Streamlit caches no intermediate files, so each run stores artifacts in a temporary workspace, streams results to the browser, and cleans up after completion.
+
 ## Installation
 
 ### Local Installation
