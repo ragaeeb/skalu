@@ -225,7 +225,14 @@ def round3(value):
     """
     return round(float(value), 3)
 
-def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
+def process_pdf(
+    pdf_path,
+    output_json_path,
+    params=None,
+    debug_dir=None,
+    save_visualization=False,
+    progress_callback=None,
+):
     """
     Processes a PDF file to detect horizontal lines and rectangles on each page.
     """
@@ -254,8 +261,15 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
     calculated_dpi_x = None
     calculated_dpi_y = None
     
-    print(f"Processing PDF with {len(doc)} pages")
-    for page_num in tqdm(range(len(doc)), desc="Processing pages"):
+    total_pages = len(doc)
+    if progress_callback:
+        try:
+            progress_callback(0, total_pages)
+        except Exception:
+            pass
+
+    print(f"Processing PDF with {total_pages} pages")
+    for page_num in tqdm(range(total_pages), desc="Processing pages"):
         page = doc.load_page(page_num)
         
         # Get bounds
@@ -382,6 +396,12 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
         # Clean up pixmap
         pix = None
 
+        if progress_callback:
+            try:
+                progress_callback(page_num + 1, total_pages)
+            except Exception:
+                pass
+
     doc.close()
 
     # Create result structure
@@ -405,9 +425,22 @@ def process_pdf(pdf_path, output_json_path, params=None, debug_dir=None, save_vi
         json.dump(result, f, indent=4, ensure_ascii=False)
     print(f"Saved PDF detection results → {output_json_path}")
 
+    if progress_callback:
+        try:
+            progress_callback(total_pages, total_pages)
+        except Exception:
+            pass
+
     return True
 
-def process_single_image(image_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
+def process_single_image(
+    image_path,
+    output_json_path,
+    params=None,
+    debug_dir=None,
+    save_visualization=False,
+    progress_callback=None,
+):
     """
     Processes a single image to detect horizontal lines and rectangles.
     
@@ -440,6 +473,12 @@ def process_single_image(image_path, output_json_path, params=None, debug_dir=No
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
+
+    if progress_callback:
+        try:
+            progress_callback(0, 1)
+        except Exception:
+            pass
 
     # Detect structures
     lines = detect_horizontal_lines(img, min_line_ratio, max_line_h, debug_dir)
@@ -484,6 +523,12 @@ def process_single_image(image_path, output_json_path, params=None, debug_dir=No
         dbg_path = os.path.splitext(output_json_path)[0] + "_detected.jpg"
         cv2.imwrite(dbg_path, debug_img)
         print(f"Saved visualization → {dbg_path}")
+
+    if progress_callback:
+        try:
+            progress_callback(1, 1)
+        except Exception:
+            pass
 
     return True
 

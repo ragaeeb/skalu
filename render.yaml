@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: skalu-demo
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: "gunicorn -b 0.0.0.0:${PORT:-10000} app:app"
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: MAX_CONTENT_LENGTH
+        value: "26214400"

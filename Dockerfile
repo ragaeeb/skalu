@@ -6,34 +6,29 @@ WORKDIR /app
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install dependencies
+# Install system and Python dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libfreetype6-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY skalu.py .
-COPY README.md .
+# Copy the rest of the application code
+COPY . .
 
-# Create directories
-RUN mkdir -p /data /output
+# Ensure data directories exist for optional batch processing
+ENV INPUT_DIR=/data \
+    OUTPUT_DIR=/output \
+    PYTHONUNBUFFERED=1
+RUN mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" && \
+    chmod +x /app/entrypoint.sh
 
-# Set default environment variables
-ENV INPUT_DIR=/data
-ENV OUTPUT_DIR=/output
+# Expose the port Render assigns (defaults to 10000 locally)
+EXPOSE 10000
 
-# Create entrypoint script
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
-# Set entrypoint
+# Use the helper script so the container can run either the CLI or the web demo
 ENTRYPOINT ["/app/entrypoint.sh"]
-
-# Default command processes all images in the input directory
-# This can be overridden by docker run command
-CMD ["all"]
+CMD ["web"]

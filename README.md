@@ -24,6 +24,47 @@ Skalu is a Python tool for detecting horizontal lines and rectangles in images a
 - **Docker Support**: Run anywhere with containerization
 - **Google Colab Integration**: Process files in the cloud
 
+## Web Demo
+
+You can explore Skalu through a lightweight Flask web demo that accepts PDF and image uploads and shows the detected rectangles and horizontal lines.
+
+- **Real-time feedback** – uploads run asynchronously so the page displays live progress as each page is analyzed.
+- **Inline insights** – once finished, the app renders summaries, visualizations, debug frames, and a downloadable JSON payload without refreshing the page.
+
+### Run the demo locally
+
+```bash
+pip install -r requirements.txt
+FLASK_APP=app.py flask run
+```
+
+Then open <http://127.0.0.1:5000> in your browser, upload a document, and review the JSON output directly in the page. The demo now renders annotated visualizations, surfaces the intermediate debug frames when available, and lets you download the structured results as a JSON file with one click.
+
+### Deploy to Render
+
+1. Push this repository to your own GitHub account.
+2. Create a new **Web Service** on [Render](https://render.com/) and connect it to your fork.
+3. When prompted, enable the **Auto-detect settings from render.yaml** option.
+4. Deploy. Render will run `pip install -r requirements.txt` and start the server with `gunicorn app:app`.
+
+The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
+
+### Deploy to Streamlit Cloud
+
+You can ship the same experience to [Streamlit Community Cloud](https://streamlit.io/cloud) with the dedicated `streamlit_app.py` entry point.
+
+1. Add this repository to Streamlit Cloud and choose **streamlit_app.py** as the app file.
+2. Make sure the environment installs the `requirements.txt` dependencies (Streamlit will do this automatically).
+3. Once deployed, the UI mirrors the Render demo: upload a PDF or image, watch live progress, review inline visualizations/debug frames, and download the JSON results.
+
+To try it locally, run:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Streamlit caches no intermediate files, so each run stores artifacts in a temporary workspace, streams results to the browser, and cleans up after completion.
+
 ## Installation
 
 ### Local Installation
@@ -46,8 +87,14 @@ Skalu is a Python tool for detecting horizontal lines and rectangles in images a
 # Build the Docker image
 docker build -t skalu .
 
-# Run the container with your images
-docker run -v /path/to/your/images:/data skalu /data
+# Start the web demo on http://localhost:10000
+docker run -p 10000:10000 skalu
+
+# Run the batch processor against a mounted volume
+docker run -v /path/to/your/images:/data skalu all
+
+# Process a single file inside the container
+docker run -v /path/to/your/file.pdf:/data/file.pdf skalu /data/file.pdf
 ```
 
 ## Usage
