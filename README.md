@@ -42,7 +42,7 @@ Skalu is a computer-vision toolkit that detects horizontal lines and rectangles 
 
 ## Project structure
 
-```
+```text
 .
 ├── AGENTS.md                # Repo conventions for AI assistants
 ├── LICENSE                  # MIT License
@@ -103,7 +103,7 @@ docker run -p 10000:10000 skalu
 
 ## Usage
 
-### Command line interface
+### Command-line interface
 
 The CLI lives inside `skalu.processing`. Invoke it with Python to process single files, PDFs, or entire folders:
 
