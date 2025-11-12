@@ -194,7 +194,7 @@ class TestGetImageDPI(unittest.TestCase):
         self.assertEqual(dpi_x, 0)
         self.assertEqual(dpi_y, 0)
 
-    @patch("skalu.Image")
+    @patch("PIL.Image")
     def test_get_dpi_from_image(self, mock_image_class):
         """Test successful DPI extraction."""
         mock_img = MagicMock()
@@ -385,7 +385,7 @@ class TestProcessFolder(unittest.TestCase):
 class TestProcessPDF(unittest.TestCase):
     """Test PDF processing."""
 
-    @patch("skalu.fitz")
+    @patch("skalu.processing.pymupdf")
     def test_process_pdf_basic(self, mock_fitz):
         """Test basic PDF processing with mocked PyMuPDF."""
         # Mock PDF document
@@ -418,7 +418,7 @@ class TestProcessPDF(unittest.TestCase):
             self.assertTrue(success)
             self.assertTrue(os.path.exists(output_path))
 
-    @patch("skalu.fitz")
+    @patch("skalu.processing.pymupdf")
     def test_process_pdf_with_progress(self, mock_fitz):
         """Test PDF processing with progress callback."""
         mock_doc = MagicMock()

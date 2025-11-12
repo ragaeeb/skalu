@@ -191,7 +191,7 @@ def get_image_dpi(image_path: str) -> Tuple[int, int]:
         A tuple (dpi_x, dpi_y) containing the horizontal and vertical DPI values
     """
     try:
-        from skalu import Image as pil_image
+        from PIL import Image as pil_image
 
         with pil_image.open(image_path) as img:
             dpi = img.info.get("dpi", (0, 0))
@@ -272,7 +272,11 @@ def process_pdf(
     if params is None:
         params = {}
 
-    from skalu import fitz as pymupdf
+    try:
+        import fitz as pymupdf
+    except ImportError as e:
+        print(f"Error: PyMuPDF (fitz) is required for PDF processing: {e}")
+        return False
 
     try:
         doc = pymupdf.open(pdf_path)
