@@ -21,6 +21,7 @@ Skalu is a Python tool for detecting horizontal lines and rectangles in images a
 - **Smart Filtering**: Only include pages/images with detected structures
 - **Visual Debugging**: Generate annotated images showing detected structures
 - **Configurable Parameters**: Adjust detection sensitivity for different structure types
+- **Versioned CLI**: Check the currently installed release with `python skalu.py --version` (v1.0.1)
 - **Docker Support**: Run anywhere with containerization
 - **Google Colab Integration**: Process files in the cloud
 
@@ -80,6 +81,8 @@ Streamlit caches no intermediate files, so each run stores artifacts in a tempor
    ```bash
    pip install -r requirements.txt
    ```
+   The consolidated `requirements.txt` now bundles both runtime and testing
+   dependencies so local development environments stay in sync with CI.
 
 ### Docker Installation
 
@@ -102,6 +105,9 @@ docker run -v /path/to/your/file.pdf:/data/file.pdf skalu /data/file.pdf
 ### Command Line Interface
 
 ```bash
+# Check the installed version
+python skalu.py --version
+
 # Process a single image
 python skalu.py path/to/image.jpg
 
@@ -143,6 +149,25 @@ python skalu.py document.pdf --debug-dir debug_output --save-viz
   - `--output`, `-o`: Custom output path for results JSON
   - `--debug-dir`: Directory for storing intermediate processing images
   - `--save-viz`: Save visualization of detected structures
+
+## Testing
+
+Run the full suite—including the new CLI integration test that validates PDF
+processing end to end—using `pytest` from the project root:
+
+```bash
+pytest -v
+```
+
+To generate coverage reports:
+
+```bash
+pytest --cov=skalu --cov-report=term --cov-report=html
+```
+
+The integration test exercises `python skalu.py tests/test.pdf` and compares the
+output JSON to `tests/expected_test_results.json`, ensuring the public CLI stays
+aligned with the reference data set.
 
 ## Output Format
 
