@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skalu"
+version = "0.1.0"
+description = "Document layout analysis utilities and demos."
+readme = "README.md"
+authors = [{ name = "Skalu" }]
+requires-python = ">=3.9"
+dependencies = [
+    "opencv-python-headless>=4.12.0.88",
+    "numpy>=2.2.5",
+    "tqdm>=4.67.1",
+    "PyMuPDF>=1.26.6",
+    "Pillow>=12.0",
+    "Flask>=3.0.3",
+    "gunicorn>=23.0.0",
+    "streamlit>=1.51.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-cov>=7.0",
+    "pytest-mock>=3.15.1",
+    "coverage>=7.11.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
