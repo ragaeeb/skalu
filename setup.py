@@ -6,26 +6,31 @@ from pathlib import Path
 readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists() else ""
 
+# Read version from __version__.py
+version_file = Path(__file__).parent / "src" / "skalu" / "__version__.py"
+version = {}
+exec(version_file.read_text(), version)
+
 setup(
     name="skalu",
-    version="0.1.0",
+    version=version["__version__"],
     description="Document analysis toolkit for detecting horizontal lines and rectangles in PDFs and images",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Your Name",
     author_email="your.email@example.com",
-    url="https://github.com/yourusername/skalu",
+    url="https://github.com/ragaeeb/skalu",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     install_requires=[
-        "opencv-python-headless>=4.5.0",
-        "numpy>=1.19.0",
-        "pymupdf>=1.18.0",
-        "pillow>=8.0.0",
-        "tqdm>=4.50.0",
-        "flask>=2.0.0",
-        "werkzeug>=2.0.0",
-        "streamlit>=1.20.0",
+        "opencv-python-headless>=4.12.0.88",
+        "numpy>=1.24.0",
+        "pymupdf>=1.23.0",
+        "pillow>=12.0.0",
+        "tqdm>=4.66.0",
+        "flask>=3.1.2",
+        "werkzeug>=3.1.3",
+        "streamlit>=1.51.0",
     ],
     extras_require={
         "dev": [
@@ -38,17 +43,13 @@ setup(
             "skalu=skalu.processing:main",
         ],
     },
-    python_requires=">=3.8",
+    python_requires=">=3.13",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
     ],
     include_package_data=True,
     package_data={

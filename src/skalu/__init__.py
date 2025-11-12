@@ -1,5 +1,6 @@
 """Skalu document analysis toolkit."""
 
+from .__version__ import __version__
 import fitz  # type: ignore
 from PIL import Image
 
@@ -16,6 +17,7 @@ from .processing import (
 )
 
 __all__ = [
+    "__version__",
     "detect_horizontal_lines",
     "detect_rectangles",
     "draw_detections",

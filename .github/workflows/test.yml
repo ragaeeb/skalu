@@ -51,36 +51,3 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v6
-      with:
-        python-version: "3.13"
-
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-    - name: Install linting tools with uv
-      run: |
-        uv pip install --system pylint black flake8
-
-    - name: Check code formatting with black
-      run: |
-        black --check src/ tests/ || true
-
-    - name: Run flake8
-      run: |
-        flake8 src/ tests/ --max-line-length=120 --extend-ignore=E203,W503 || true
-
-    - name: Run pylint
-      run: |
-        uv pip install --system -r requirements.txt
-        pylint src/skalu/ --disable=all --enable=E,F || true

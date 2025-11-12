@@ -1,32 +1,62 @@
 [build-system]
-requires = ["setuptools>=61", "wheel"]
+requires = ["setuptools>=80", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "skalu"
-version = "0.1.0"
-description = "Document layout analysis utilities and demos."
+dynamic = ["version"]
+description = "Document analysis toolkit for detecting horizontal lines and rectangles in PDFs and images"
 readme = "README.md"
-authors = [{ name = "Skalu" }]
-requires-python = ">=3.9"
-dependencies = [
-    "opencv-python-headless>=4.12.0.88",
-    "numpy>=2.2.5",
-    "tqdm>=4.67.1",
-    "PyMuPDF>=1.26.6",
-    "Pillow>=12.0",
-    "Flask>=3.0.3",
-    "gunicorn>=23.0.0",
-    "streamlit>=1.51.0",
+requires-python = ">=3.13"
+license = {text = "MIT"}
+authors = [
+    {name = "Ragaeeb Haq"}
 ]
+keywords = ["pdf", "document-analysis", "opencv", "image-processing"]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=9.0.0",
-    "pytest-cov>=7.0",
-    "pytest-mock>=3.15.1",
-    "coverage>=7.11.3",
+[tool.semantic_release]
+version_toml = ["pyproject.toml:tool.semantic_release.version"]
+version_variables = ["src/skalu/__version__.py:__version__"]
+version_pattern = [
+    "README.md:Version {version}",
 ]
+branch = "main"
+upload_to_pypi = false
+upload_to_release = true
+build_command = "pip install build && python -m build"
+commit_message = "chore(release): {version} [skip ci]"
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.changelog]
+template_dir = "templates"
+changelog_file = "CHANGELOG.md"
+exclude_commit_patterns = []
+
+[tool.semantic_release.changelog.environment]
+block_start_string = "{%"
+block_end_string = "%}"
+variable_start_string = "{{"
+variable_end_string = "}}"
+comment_start_string = "{#"
+comment_end_string = "#}"
+trim_blocks = false
+lstrip_blocks = false
+newline_sequence = "\n"
+keep_trailing_newline = false
+extensions = []
+autoescape = true
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=skalu --cov-report=term-missing"
