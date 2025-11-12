@@ -4,11 +4,13 @@ This document explains how to run the comprehensive unit tests for the Skalu pro
 
 ## Installation
 
-Install all dependencies (runtime and testing) from the consolidated requirements
-file:
+Create a virtual environment with Python 3.13 and install the development
+dependencies using [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.13
+source .venv/bin/activate
+uv pip install -r requirements_dev.txt
 ```
 
 ## Running Tests
@@ -16,13 +18,13 @@ pip install -r requirements.txt
 ### Run all tests
 
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 ### Run tests with coverage report
 
 ```bash
-pytest --cov=skalu --cov-report=html --cov-report=term
+uv run pytest --cov=skalu --cov-report=html --cov-report=term
 ```
 
 This will generate:
@@ -33,25 +35,25 @@ This will generate:
 
 ```bash
 # Test only horizontal line detection
-pytest tests/test_skalu.py::TestDetectHorizontalLines -v
+uv run pytest tests/test_skalu.py::TestDetectHorizontalLines -v
 
 # Test only rectangle detection
-pytest tests/test_skalu.py::TestDetectRectangles -v
+uv run pytest tests/test_skalu.py::TestDetectRectangles -v
 
 # Test only PDF processing
-pytest tests/test_skalu.py::TestProcessPDF -v
+uv run pytest tests/test_skalu.py::TestProcessPDF -v
 ```
 
 ### Run specific test methods
 
 ```bash
-pytest tests/test_skalu.py::TestDetectHorizontalLines::test_detect_single_line -v
+uv run pytest tests/test_skalu.py::TestDetectHorizontalLines::test_detect_single_line -v
 ```
 
 ### Run with verbose output
 
 ```bash
-pytest tests/test_skalu.py -vv
+uv run pytest tests/test_skalu.py -vv
 ```
 
 ## Test Coverage
@@ -115,7 +117,7 @@ The test suite covers:
 To run tests in CI/CD pipelines, use:
 
 ```bash
-pytest --cov=skalu --cov-report=xml --cov-report=term
+uv run pytest --cov=skalu --cov-report=xml --cov-report=term
 ```
 
 The XML report can be uploaded to code coverage services like Codecov or Coveralls.
@@ -189,6 +191,6 @@ Current test coverage target: **80%+**
 To view detailed coverage:
 
 ```bash
-pytest --cov=skalu --cov-report=html
+uv run pytest --cov=skalu --cov-report=html
 open htmlcov/index.html
 ```

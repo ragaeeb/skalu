@@ -238,3 +238,14 @@ if analysis:
 
     st.markdown("### Full JSON Output")
     st.code(analysis["result_json"], language="json")
+
+st.markdown(
+    """
+    <hr style="margin-top: 3rem; margin-bottom: 1rem;" />
+    <div style="text-align: center; font-size: 0.9rem;">
+        Built by <strong>Ragaeeb Haq</strong>. View the source on
+        <a href="https://github.com/ragaeeb/skalu" target="_blank" rel="noopener noreferrer">GitHub</a>.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
