@@ -1,8 +1,13 @@
-opencv-python-headless>=4.12.0.88
-numpy>=2.2.5
-tqdm>=4.67.1
-PyMuPDF>=1.26.6
-Pillow>=12.0
-Flask>=3.0.3
-gunicorn>=23.0.0
-streamlit>=1.51.0
+# Install package in editable mode
+-e .
+
+# Core dependencies are specified in setup.py
+# These are pinned versions for production stability
+opencv-python-headless==4.8.1.78
+numpy==1.24.3
+pymupdf==1.23.8
+pillow==10.1.0
+tqdm==4.66.1
+flask==3.0.0
+werkzeug==3.0.1
+streamlit==1.29.0
