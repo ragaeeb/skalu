@@ -4,16 +4,11 @@ This document explains how to run the comprehensive unit tests for the Skalu pro
 
 ## Installation
 
-First, install the testing dependencies:
+Install all dependencies (runtime and testing) from the consolidated requirements
+file:
 
 ```bash
-pip install -r requirements-test.txt
-```
-
-Or if you already have the base requirements installed:
-
-```bash
-pip install pytest pytest-cov pytest-mock coverage
+pip install -r requirements.txt
 ```
 
 ## Running Tests
@@ -21,13 +16,13 @@ pip install pytest pytest-cov pytest-mock coverage
 ### Run all tests
 
 ```bash
-pytest test_skalu.py -v
+pytest -v
 ```
 
 ### Run tests with coverage report
 
 ```bash
-pytest test_skalu.py --cov=skalu --cov-report=html --cov-report=term
+pytest --cov=skalu --cov-report=html --cov-report=term
 ```
 
 This will generate:
@@ -38,25 +33,25 @@ This will generate:
 
 ```bash
 # Test only horizontal line detection
-pytest test_skalu.py::TestDetectHorizontalLines -v
+pytest tests/test_skalu.py::TestDetectHorizontalLines -v
 
 # Test only rectangle detection
-pytest test_skalu.py::TestDetectRectangles -v
+pytest tests/test_skalu.py::TestDetectRectangles -v
 
 # Test only PDF processing
-pytest test_skalu.py::TestProcessPDF -v
+pytest tests/test_skalu.py::TestProcessPDF -v
 ```
 
 ### Run specific test methods
 
 ```bash
-pytest test_skalu.py::TestDetectHorizontalLines::test_detect_single_line -v
+pytest tests/test_skalu.py::TestDetectHorizontalLines::test_detect_single_line -v
 ```
 
 ### Run with verbose output
 
 ```bash
-pytest test_skalu.py -vv
+pytest tests/test_skalu.py -vv
 ```
 
 ## Test Coverage
@@ -111,12 +106,16 @@ The test suite covers:
    - Progress callbacks
    - Invalid file handling
 
+9. **CLI Integration** (`TestCLIIntegration`)
+   - Executes `python skalu.py` against `tests/test.pdf`
+   - Compares the generated JSON with `tests/expected_test_results.json`
+
 ## Continuous Integration
 
 To run tests in CI/CD pipelines, use:
 
 ```bash
-pytest test_skalu.py --cov=skalu --cov-report=xml --cov-report=term
+pytest --cov=skalu --cov-report=xml --cov-report=term
 ```
 
 The XML report can be uploaded to code coverage services like Codecov or Coveralls.
@@ -190,6 +189,6 @@ Current test coverage target: **80%+**
 To view detailed coverage:
 
 ```bash
-pytest test_skalu.py --cov=skalu --cov-report=html
+pytest --cov=skalu --cov-report=html
 open htmlcov/index.html
 ```

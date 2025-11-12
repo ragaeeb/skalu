@@ -1,12 +1,21 @@
 """Comprehensive unit tests for skalu.py"""
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np
+
+# Ensure the project root is available on the import path when the tests are
+# executed from within the `tests` package.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Import functions from skalu
 from skalu import (
@@ -14,9 +23,9 @@ from skalu import (
     detect_rectangles,
     draw_detections,
     get_image_dpi,
-    process_single_image,
     process_folder,
     process_pdf,
+    process_single_image,
     round3,
 )
 
@@ -461,6 +470,42 @@ class TestProcessPDF(unittest.TestCase):
             output_path = os.path.join(tmpdir, "output.json")
             success = process_pdf("/nonexistent.pdf", output_path)
             self.assertFalse(success)
+
+
+class TestCLIIntegration(unittest.TestCase):
+    """Integration tests for the CLI entry point."""
+
+    def test_pdf_cli_matches_expected_results(self):
+        """Run the CLI against the sample PDF and compare the JSON output."""
+        repo_root = Path(__file__).resolve().parents[1]
+        script_path = repo_root / "skalu.py"
+        input_pdf = Path(__file__).resolve().parent / "test.pdf"
+        expected_json_path = Path(__file__).resolve().parent / "expected_test_results.json"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "results.json"
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    str(input_pdf),
+                    "-o",
+                    str(output_path),
+                ],
+                check=True,
+                capture_output=True,
+            )
+
+            stdout = completed.stdout.decode("utf-8")
+            stderr = completed.stderr.decode("utf-8")
+
+            with expected_json_path.open("r", encoding="utf-8") as expected_file:
+                expected = json.load(expected_file)
+            with output_path.open("r", encoding="utf-8") as output_file:
+                actual = json.load(output_file)
+
+        self.assertEqual(actual, expected, msg=f"stdout:\n{stdout}\n\nstderr:\n{stderr}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ from PIL import Image
 import fitz  # PyMuPDF
 import numpy as np
 
+__version__ = "1.0.1"
+
 def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
     """
     Detects only long, thin horizontal lines in an image.
@@ -634,6 +636,7 @@ def main():
     and calls the appropriate processing functions.
     """
     parser = argparse.ArgumentParser(description="Skalu - Detect horizontal lines and rectangles in images and PDFs")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("input_path", help="Image file, PDF file, or folder")
     parser.add_argument("-o", "--output", help="Output JSON file path")
     
