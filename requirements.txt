@@ -1,3 +1,8 @@
-# Install package in editable mode
-# All dependencies are defined in setup.py
--e .
+opencv-python>=4.12.0.88
+numpy>=2.2.5
+tqdm>=4.67.1
+PyMuPDF>=1.26.6
+Pillow>=10.4.0
+Flask>=3.0.3
+gunicorn>=23.0.0
+streamlit>=1.51.0
