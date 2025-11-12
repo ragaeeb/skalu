@@ -25,7 +25,7 @@ setup(
     install_requires=[
         "opencv-python-headless>=4.12.0.88",
         "numpy>=1.24.0",
-        "pymupdf>=1.23.0",
+        "pymupdf>=1.26.6",
         "pillow>=12.0.0",
         "tqdm>=4.66.0",
         "flask>=3.1.2",
@@ -34,8 +34,8 @@ setup(
     ],
     extras_require={
         "dev": [
-            "pytest>=7.0.0",
-            "pytest-cov>=3.0.0",
+            "pytest>=9.0.0",
+            "pytest-cov>=7.0.0",
         ],
     },
     entry_points={
