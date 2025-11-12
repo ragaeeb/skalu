@@ -104,8 +104,30 @@ def collect_visualizations(workdir: str) -> List[Dict[str, str]]:
     return visualizations
 
 
+def _is_debug_step_image(filename: str) -> bool:
+    """Check if an image is a debug step (not a detection visualization)."""
+    # Debug step images typically have patterns like:
+    # step_01_gray.png, step_02_otsu.png, rect_01_gray.png, etc.
+    debug_patterns = [
+        r"step_\d+_",  # step_01_gray.png, step_02_otsu.png
+        r"rect_\d+_",  # rect_01_gray.png, rect_02_edges.png
+    ]
+    
+    filename_lower = filename.lower()
+    for pattern in debug_patterns:
+        if re.search(pattern, filename_lower):
+            return True
+    
+    return False
+
+
 def collect_debug_groups(debug_dir: str) -> List[Dict[str, List[Dict[str, str]]]]:
-    """Collect debug imagery grouped by page or processing step."""
+    """Collect debug imagery grouped by page or processing step.
+    
+    Note: This function now filters out intermediate debug step images
+    (like step_01_gray.png, rect_02_edges.png) and only returns
+    detection visualizations.
+    """
     groups: List[Dict[str, List[Dict[str, str]]]] = []
     if not debug_dir or not os.path.isdir(debug_dir):
         return groups
@@ -125,6 +147,10 @@ def collect_debug_groups(debug_dir: str) -> List[Dict[str, List[Dict[str, str]]]
 
             images = []
             for img_name in sorted(os.listdir(entry_path)):
+                # Skip debug step images
+                if _is_debug_step_image(img_name):
+                    continue
+                    
                 if not img_name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                     continue
                 images.append({"name": img_name, "path": os.path.join(entry_path, img_name)})
@@ -138,6 +164,10 @@ def collect_debug_groups(debug_dir: str) -> List[Dict[str, List[Dict[str, str]]]
     else:
         images = []
         for img_name in sorted(entries):
+            # Skip debug step images
+            if _is_debug_step_image(img_name):
+                continue
+                
             if not img_name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
                 continue
             images.append({"name": img_name, "path": os.path.join(debug_dir, img_name)})
