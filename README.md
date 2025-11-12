@@ -35,7 +35,9 @@ You can explore Skalu through a lightweight Flask web demo that accepts PDF and 
 ### Run the demo locally
 
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.13
+source .venv/bin/activate
+uv pip install -r requirements.txt
 FLASK_APP=app.py flask run
 ```
 
@@ -46,7 +48,7 @@ Then open <http://127.0.0.1:5000> in your browser, upload a document, and review
 1. Push this repository to your own GitHub account.
 2. Create a new **Web Service** on [Render](https://render.com/) and connect it to your fork.
 3. When prompted, enable the **Auto-detect settings from render.yaml** option.
-4. Deploy. Render will run `pip install -r requirements.txt` and start the server with `gunicorn app:app`.
+4. Deploy. Render will run `uv pip install --system -r requirements.txt` and start the server with `gunicorn app:app`.
 
 The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
 
@@ -55,7 +57,7 @@ The default configuration limits uploads to 25&nbsp;MB to keep the demo responsi
 You can ship the same experience to [Streamlit Community Cloud](https://streamlit.io/cloud) with the dedicated `streamlit_app.py` entry point.
 
 1. Add this repository to Streamlit Cloud and choose **streamlit_app.py** as the app file.
-2. Make sure the environment installs the `requirements.txt` dependencies (Streamlit will do this automatically).
+2. Make sure the environment installs the `requirements.txt` dependencies. Streamlit Cloud supports [`uv`](https://docs.streamlit.io/streamlit-community-cloud/deploy-your-app/app-dependencies) so the recommended install command is `uv pip install --system -r requirements.txt`.
 3. Once deployed, the UI mirrors the Render demo: upload a PDF or image, watch live progress, review inline visualizations/debug frames, and download the JSON results.
 
 To try it locally, run:
@@ -77,12 +79,14 @@ Streamlit caches no intermediate files, so each run stores artifacts in a tempor
    cd skalu
    ```
 
-2. Install required dependencies:
+2. Create a local environment and install dependencies with [`uv`](https://github.com/astral-sh/uv):
    ```bash
-   pip install -r requirements.txt
+   uv venv --python 3.13
+   source .venv/bin/activate
+   uv pip install -r requirements_dev.txt
    ```
-   The consolidated `requirements.txt` now bundles both runtime and testing
-   dependencies so local development environments stay in sync with CI.
+   The base `requirements.txt` lists the runtime packages while
+   `requirements_dev.txt` adds the testing toolchain used by CI.
 
 ### Docker Installation
 
@@ -152,17 +156,17 @@ python skalu.py document.pdf --debug-dir debug_output --save-viz
 
 ## Testing
 
-Run the full suite—including the new CLI integration test that validates PDF
-processing end to end—using `pytest` from the project root:
+Run the full suite—including the CLI integration test that validates PDF
+processing end to end—after installing `requirements_dev.txt`:
 
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 To generate coverage reports:
 
 ```bash
-pytest --cov=skalu --cov-report=term --cov-report=html
+uv run pytest --cov=skalu --cov-report=term --cov-report=html
 ```
 
 The integration test exercises `python skalu.py tests/test.pdf` and compares the

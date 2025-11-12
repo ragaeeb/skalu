@@ -3,18 +3,22 @@ FROM python:3.13-slim
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first to leverage Docker cache
-COPY requirements.txt .
+# Copy dependency manifests first to leverage Docker cache
+COPY requirements.txt requirements_dev.txt ./
 
 # Install system and Python dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+    curl \
     libgl1 \
     libglib2.0-0 \
     libfreetype6-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir -r requirements.txt
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && /root/.local/bin/uv pip install --system -r requirements.txt
+
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Copy the rest of the application code
 COPY . .

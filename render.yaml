@@ -2,7 +2,7 @@ services:
   - type: web
     name: skalu-demo
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: "curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv pip install --system -r requirements.txt"
     startCommand: "gunicorn -b 0.0.0.0:${PORT:-10000} app:app"
     envVars:
       - key: PYTHONUNBUFFERED
