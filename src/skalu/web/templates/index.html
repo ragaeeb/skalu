@@ -447,6 +447,66 @@
         margin: 1.5rem 0 0.75rem;
       }
 
+      .site-footer {
+        margin-top: 2.5rem;
+        padding: 1.75rem;
+        border-radius: clamp(16px, 3vw, 22px);
+        background: linear-gradient(135deg, rgba(96, 165, 250, 0.18), rgba(59, 130, 246, 0.28));
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem 2rem;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--text-strong);
+        box-shadow: 0 14px 30px rgba(37, 99, 235, 0.18);
+      }
+
+      .footer-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .footer-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .footer-tagline {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: center;
+      }
+
+      .footer-links a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.6rem 1.1rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.75);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        color: var(--accent-strong);
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .footer-links a:hover,
+      .footer-links a:focus {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
+      }
+
       table {
         width: 100%;
         border-collapse: collapse;
@@ -681,9 +741,15 @@
           <section id="debug-card" class="result-section"></section>
         </div>
 
-        <footer>
-          Ready for deployment on <strong>Render</strong>. Configure your service to run <code>gunicorn app:app</code>
-          after installing dependencies with <code>pip install -r requirements.txt</code>.
+        <footer class="site-footer" aria-label="Project footer">
+          <div class="footer-meta">
+            <span class="footer-title">Skalu</span>
+            <span class="footer-tagline">Open-source document structure detection toolkit</span>
+          </div>
+          <div class="footer-links">
+            <a href="https://github.com/ragaeeb/skalu" target="_blank" rel="noopener">View on GitHub</a>
+            <a href="http://skaluapp.streamlit.app/" target="_blank" rel="noopener">Live Streamlit demo</a>
+          </div>
         </footer>
       </section>
     </main>

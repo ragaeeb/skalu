@@ -1,14 +1,34 @@
-import cv2
+"""Core image-processing primitives for the Skalu package."""
+
+from __future__ import annotations
+
+import argparse
+import json
 import os
 import sys
-import json
-import argparse
-from tqdm import tqdm
-from PIL import Image
-import fitz  # PyMuPDF
-import numpy as np
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
-def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
+import cv2
+import numpy as np
+from tqdm import tqdm
+
+__all__ = [
+    "detect_horizontal_lines",
+    "detect_rectangles",
+    "draw_detections",
+    "get_image_dpi",
+    "round3",
+    "process_single_image",
+    "process_pdf",
+    "process_folder",
+]
+
+def detect_horizontal_lines(
+    image: np.ndarray,
+    min_line_width_ratio: float = 0.2,
+    max_line_height: int = 10,
+    debug_dir: Optional[str] = None,
+) -> List[Dict[str, int]]:
     """
     Detects only long, thin horizontal lines in an image.
     
@@ -76,7 +96,7 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
         opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
-    lines = []
+    lines: List[Dict[str, int]] = []
     for c in contours:
         x, y, cw, ch = cv2.boundingRect(c)
         # *still* require the original minimum width
@@ -86,7 +106,12 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
     lines.sort(key=lambda L: L["y"])
     return lines
 
-def detect_rectangles(image, min_rect_area_ratio=0.001, max_rect_area_ratio=0.5, debug_dir=None):
+def detect_rectangles(
+    image: np.ndarray,
+    min_rect_area_ratio: float = 0.001,
+    max_rect_area_ratio: float = 0.5,
+    debug_dir: Optional[str] = None,
+) -> List[Dict[str, int]]:
     """
     Detects rectangles (including squares) in an image.
     
@@ -133,7 +158,7 @@ def detect_rectangles(image, min_rect_area_ratio=0.001, max_rect_area_ratio=0.5,
     # -- 4) Find contours
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    rectangles = []
+    rectangles: List[Dict[str, int]] = []
     for c in contours:
         # Calculate area and perimeter
         area = cv2.contourArea(c)
@@ -155,7 +180,7 @@ def detect_rectangles(image, min_rect_area_ratio=0.001, max_rect_area_ratio=0.5,
     rectangles.sort(key=lambda r: r["width"] * r["height"], reverse=True)
     return rectangles
 
-def get_image_dpi(image_path):
+def get_image_dpi(image_path: str) -> Tuple[int, int]:
     """
     Extracts DPI information from an image file.
     
@@ -166,14 +191,20 @@ def get_image_dpi(image_path):
         A tuple (dpi_x, dpi_y) containing the horizontal and vertical DPI values
     """
     try:
-        with Image.open(image_path) as img:
-            dpi = img.info.get('dpi', (0, 0))
+        from skalu import Image as pil_image
+
+        with pil_image.open(image_path) as img:
+            dpi = img.info.get("dpi", (0, 0))
             return int(dpi[0]), int(dpi[1])
-    except Exception as e:
-        print(f"Warning: Could not read DPI for {image_path}: {e}")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"Warning: Could not read DPI for {image_path}: {exc}")
         return 0, 0
 
-def draw_detections(image, horizontal_lines=None, rectangles=None):
+def draw_detections(
+    image: np.ndarray,
+    horizontal_lines: Optional[Iterable[Dict[str, int]]] = None,
+    rectangles: Optional[Iterable[Dict[str, int]]] = None,
+) -> np.ndarray:
     """
     Creates a visual representation of detected structures.
     
@@ -189,11 +220,12 @@ def draw_detections(image, horizontal_lines=None, rectangles=None):
     
     # Draw horizontal lines in green
     if horizontal_lines:
-        for i, L in enumerate(horizontal_lines):
-            x, y, w, h = L["x"], L["y"], L["width"], L["height"]
+        for index, line in enumerate(horizontal_lines):
+            x, y, w, h = line["x"], line["y"], line["width"], line["height"]
             cv2.rectangle(debug, (x, y), (x + w, y + h), (0, 255, 0), 2)
             cv2.putText(
-                debug, f"Line #{i+1}",
+                debug,
+                f"Line #{index + 1}",
                 (x, y - 6),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -204,11 +236,12 @@ def draw_detections(image, horizontal_lines=None, rectangles=None):
     
     # Draw rectangles in blue
     if rectangles:
-        for i, R in enumerate(rectangles):
-            x, y, w, h = R["x"], R["y"], R["width"], R["height"]
+        for index, rect in enumerate(rectangles):
+            x, y, w, h = rect["x"], rect["y"], rect["width"], rect["height"]
             cv2.rectangle(debug, (x, y), (x + w, y + h), (255, 0, 0), 2)
             cv2.putText(
-                debug, f"Rect #{i+1}",
+                debug,
+                f"Rect #{index + 1}",
                 (x, y - 6),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -219,30 +252,32 @@ def draw_detections(image, horizontal_lines=None, rectangles=None):
     
     return debug
 
-def round3(value):
+def round3(value: float) -> float:
     """
     Rounds a float value to exactly 3 decimal places.
     """
     return round(float(value), 3)
 
 def process_pdf(
-    pdf_path,
-    output_json_path,
-    params=None,
-    debug_dir=None,
-    save_visualization=False,
-    progress_callback=None,
-):
+    pdf_path: str,
+    output_json_path: str,
+    params: Optional[Dict[str, float]] = None,
+    debug_dir: Optional[str] = None,
+    save_visualization: bool = False,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> bool:
     """
     Processes a PDF file to detect horizontal lines and rectangles on each page.
     """
     if params is None:
         params = {}
 
+    from skalu import fitz as pymupdf
+
     try:
-        doc = fitz.open(pdf_path)
-    except Exception as e:
-        print(f"Error: Unable to open PDF at {pdf_path}: {e}")
+        doc = pymupdf.open(pdf_path)
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"Error: Unable to open PDF at {pdf_path}: {exc}")
         return False
 
     # Get parameters for detection
@@ -258,14 +293,14 @@ def process_pdf(
     pages = []
     
     # Variables to track DPI (calculated from first page)
-    calculated_dpi_x = None
-    calculated_dpi_y = None
+    calculated_dpi_x: Optional[float] = None
+    calculated_dpi_y: Optional[float] = None
     
     total_pages = len(doc)
     if progress_callback:
         try:
             progress_callback(0, total_pages)
-        except Exception:
+        except Exception:  # pragma: no cover - defensive callback guard
             pass
 
     print(f"Processing PDF with {total_pages} pages")
@@ -294,7 +329,7 @@ def process_pdf(
         render_height = max(1, effective_bounds.height * scale)
         
         # Use PyMuPDF's get_pixmap
-        mat = fitz.Matrix(scale, scale)
+        mat = pymupdf.Matrix(scale, scale)
         
         # DEBUG: Let's see what's happening with the bounds and clipping
         #print(f"DEBUG - Scale: {scale}")
@@ -399,7 +434,7 @@ def process_pdf(
         if progress_callback:
             try:
                 progress_callback(page_num + 1, total_pages)
-            except Exception:
+            except Exception:  # pragma: no cover - defensive callback guard
                 pass
 
     doc.close()
@@ -421,8 +456,8 @@ def process_pdf(
 
     # Save result to JSON
     os.makedirs(os.path.dirname(os.path.abspath(output_json_path)), exist_ok=True)
-    with open(output_json_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=4, ensure_ascii=False)
+    with open(output_json_path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=4, ensure_ascii=False)
     print(f"Saved PDF detection results → {output_json_path}")
 
     if progress_callback:
@@ -434,13 +469,13 @@ def process_pdf(
     return True
 
 def process_single_image(
-    image_path,
-    output_json_path,
-    params=None,
-    debug_dir=None,
-    save_visualization=False,
-    progress_callback=None,
-):
+    image_path: str,
+    output_json_path: str,
+    params: Optional[Dict[str, float]] = None,
+    debug_dir: Optional[str] = None,
+    save_visualization: bool = False,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+) -> bool:
     """
     Processes a single image to detect horizontal lines and rectangles.
     
@@ -477,7 +512,7 @@ def process_single_image(
     if progress_callback:
         try:
             progress_callback(0, 1)
-        except Exception:
+        except Exception:  # pragma: no cover - defensive callback guard
             pass
 
     # Detect structures
@@ -527,12 +562,18 @@ def process_single_image(
     if progress_callback:
         try:
             progress_callback(1, 1)
-        except Exception:
+        except Exception:  # pragma: no cover - defensive callback guard
             pass
 
     return True
 
-def process_folder(folder_path, output_json_path, params=None, debug_dir=None, save_visualization=False):
+def process_folder(
+    folder_path: str,
+    output_json_path: str,
+    params: Optional[Dict[str, float]] = None,
+    debug_dir: Optional[str] = None,
+    save_visualization: bool = False,
+) -> bool:
     """
     Processes all images in a folder to detect horizontal lines and rectangles.
     
