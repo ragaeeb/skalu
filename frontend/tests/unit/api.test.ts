@@ -1,110 +1,146 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { downloadUrl, fetchResults, startProcessing, uploadFile } from "../../src/lib/api"
+import { analyzeFile, analyzeFileStream, fetchVersion } from "../../src/lib/api"
+import type { AnalyzePayload } from "../../src/types"
+
+const DEFAULT_OPTIONS = {
+  include_empty_pages: true,
+  include_visualizations: false,
+  detection_params: {
+    min_line_width_ratio: 0.2,
+    max_line_height: 10,
+    min_rect_area_ratio: 0.001,
+    max_rect_area_ratio: 0.5,
+  },
+}
+
+const buildPayload = (): AnalyzePayload => ({
+  result_json: "{\"pages\":[]}",
+  result_data: { pages: [] },
+  summary: { type: "pdf", pages: [] },
+  processed_filename: "sample.pdf",
+  detection_params: DEFAULT_OPTIONS.detection_params,
+  visualizations: [],
+  debug_groups: [],
+})
+
+const streamFromChunks = (chunks: string[]): ReadableStream<Uint8Array> =>
+  new ReadableStream<Uint8Array>({
+    start: (controller) => {
+      const encoder = new TextEncoder()
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk))
+      }
+      controller.close()
+    },
+  })
 
 afterEach(() => {
   mock.restore()
 })
 
 describe("api helpers", () => {
-  test("uploadFile returns job id and sends file payload", async () => {
-    const fakeFetch = mock(async () => new Response(JSON.stringify({ job_id: "abc123", status: "uploaded" }), { status: 202 }))
+  test("analyzeFile posts multipart form and returns payload", async () => {
+    const payload = buildPayload()
+    const fakeFetch = mock(async () => new Response(JSON.stringify(payload), { status: 200 }))
     globalThis.fetch = fakeFetch as unknown as typeof fetch
 
     const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
-    const data = await uploadFile(file)
+    const result = await analyzeFile(file, DEFAULT_OPTIONS)
 
-    expect(data.job_id).toBe("abc123")
+    expect(result.processed_filename).toBe("sample.pdf")
     expect(fakeFetch).toHaveBeenCalledTimes(1)
-
-    const call = fakeFetch.mock.calls[0]
-    const req = call?.[1] as { body?: FormData } | undefined
-    const form = req?.body
-    expect(form).toBeInstanceOf(FormData)
-    expect(form?.get("file")).toBeInstanceOf(File)
+    const request = fakeFetch.mock.calls[0]?.[1] as { body?: FormData } | undefined
+    expect(request?.body).toBeInstanceOf(FormData)
+    expect(request?.body?.get("file")).toBeInstanceOf(File)
+    expect(request?.body?.get("stream")).toBe("false")
+    expect(request?.body?.get("include_empty_pages")).toBe("true")
   })
 
-  test("startProcessing sends processing configuration", async () => {
-    const fakeFetch = mock(async () => new Response(JSON.stringify({ job_id: "abc123", status: "queued" }), { status: 202 }))
-    globalThis.fetch = fakeFetch as unknown as typeof fetch
-
-    await startProcessing("abc123", {
-      include_empty_pages: true,
-      save_visualization: true,
-      detection_params: {
-        min_line_width_ratio: 0.2,
-        max_line_height: 10,
-        min_rect_area_ratio: 0.001,
-        max_rect_area_ratio: 0.5,
-      },
-    })
-
-    const call = fakeFetch.mock.calls[0]
-    const url = String(call?.[0])
-    const req = call?.[1] as { body?: string; method?: string } | undefined
-    expect(url).toContain("/process/abc123")
-    expect(req?.method).toBe("POST")
-    expect(typeof req?.body).toBe("string")
-    const payload = JSON.parse(req?.body ?? "{}") as {
-      include_empty_pages: boolean
-      save_visualization: boolean
-    }
-    expect(payload.include_empty_pages).toBe(true)
-    expect(payload.save_visualization).toBe(true)
-  })
-
-  test("uploadFile throws API error", async () => {
-    const fakeFetch = mock(async () => new Response(JSON.stringify({ error: "bad upload" }), { status: 400 }))
+  test("analyzeFile throws backend error message", async () => {
+    const fakeFetch = mock(async () => new Response(JSON.stringify({ error: "Unsupported file type." }), { status: 400 }))
     globalThis.fetch = fakeFetch as unknown as typeof fetch
 
     const file = new File(["hello"], "bad.txt", { type: "text/plain" })
-    await expect(uploadFile(file)).rejects.toThrow("bad upload")
+    await expect(analyzeFile(file, DEFAULT_OPTIONS)).rejects.toThrow("Unsupported file type.")
   })
 
-  test("fetchResults toggles viz query", async () => {
-    const fakeFetch = mock(async (url: string | URL | Request) => {
-      const text = String(url)
-      if (!text.includes("viz=true") && text.includes("job-1")) {
-        return new Response(JSON.stringify({
-          result_json: "{}",
-          summary: null,
-          processed_filename: "f.pdf",
-          detection_params: {
-            min_line_width_ratio: 0,
-            max_line_height: 0,
-            min_rect_area_ratio: 0,
-            max_rect_area_ratio: 0
-          },
-          download_filename: "f.json",
-          visualizations: [],
-          debug_groups: []
-        }), { status: 200 })
-      }
-      return new Response(JSON.stringify({
-        result_json: "{}",
-        summary: null,
-        processed_filename: "f.pdf",
-        detection_params: {
-          min_line_width_ratio: 0,
-          max_line_height: 0,
-          min_rect_area_ratio: 0,
-          max_rect_area_ratio: 0
-        },
-        download_filename: "f.json",
-        visualizations: [{ label: "x", data_url: "y" }],
-        debug_groups: []
-      }), { status: 200 })
-    })
+  test("analyzeFileStream parses split NDJSON chunks and ignores malformed lines", async () => {
+    const payload = buildPayload()
+    const chunks = [
+      "{\"type\":\"accepted\",\"filename\":\"sample.pdf\",\"started_at\":\"2026-02-19T00:00:00Z\"}\n",
+      "{\"type\":\"progress\",\"processed\":1,\"total\":3,\"message\":\"Processing page 2 of 3\"}\n",
+      "not-json\n",
+      "{\"type\":\"result\",\"payload\":",
+      JSON.stringify(payload),
+      "}\n",
+    ]
 
+    const fakeFetch = mock(
+      async () =>
+        new Response(streamFromChunks(chunks), {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        }),
+    )
     globalThis.fetch = fakeFetch as unknown as typeof fetch
 
-    const withoutViz = await fetchResults("job-1")
-    const withViz = await fetchResults("job-1", true)
+    const accepted = mock(() => {})
+    const progress = mock(() => {})
+    const result = mock(() => {})
+    const error = mock(() => {})
 
-    expect(withoutViz.visualizations.length).toBe(0)
-    expect(withViz.visualizations.length).toBe(1)
+    const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
+    await analyzeFileStream(file, DEFAULT_OPTIONS, {
+      onAccepted: accepted,
+      onProgress: progress,
+      onResult: result,
+      onError: error,
+    })
+
+    expect(accepted).toHaveBeenCalledTimes(1)
+    expect(progress).toHaveBeenCalledTimes(1)
+    expect(result).toHaveBeenCalledTimes(1)
+    expect(error).toHaveBeenCalledTimes(0)
   })
 
-  test("downloadUrl uses job id", () => {
-    expect(downloadUrl("job-7")).toBe("/download/job-7")
+  test("analyzeFileStream throws when stream ends without terminal event", async () => {
+    const fakeFetch = mock(
+      async () =>
+        new Response(streamFromChunks(["{\"type\":\"accepted\",\"filename\":\"sample.pdf\",\"started_at\":\"2026-02-19T00:00:00Z\"}\n"]), {
+          status: 200,
+          headers: { "Content-Type": "application/x-ndjson" },
+        }),
+    )
+    globalThis.fetch = fakeFetch as unknown as typeof fetch
+
+    const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
+    await expect(
+      analyzeFileStream(file, DEFAULT_OPTIONS, {
+        onAccepted: () => {},
+        onProgress: () => {},
+        onResult: () => {},
+        onError: () => {},
+      }),
+    ).rejects.toThrow("Streaming response ended before terminal result")
+  })
+
+  test("fetchVersion sends frontend version header", async () => {
+    const fakeFetch = mock(async () =>
+      new Response(
+        JSON.stringify({
+          backend_version: "0.2.0",
+          frontend_version: "0.1.0+dev",
+          git_sha: "abc123",
+          build_time: "2026-02-19T00:00:00Z",
+        }),
+        { status: 200 },
+      ),
+    )
+    globalThis.fetch = fakeFetch as unknown as typeof fetch
+
+    const result = await fetchVersion()
+    expect(result.backend_version).toBe("0.2.0")
+    const request = fakeFetch.mock.calls[0]?.[1] as { headers?: Record<string, string> } | undefined
+    expect(request?.headers?.["X-Frontend-Version"]).toContain("+")
   })
 })

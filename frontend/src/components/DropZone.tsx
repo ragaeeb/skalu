@@ -23,7 +23,14 @@ export const DropZone = ({ onFile, disabled }: DropZoneProps) => {
         <button className="button" type="button" onClick={() => inputRef.current?.click()} disabled={disabled}>
           Choose File
         </button>
-        <input ref={inputRef} type="file" onChange={(event) => void onChange(event)} disabled={disabled} hidden />
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.webp,image/png,image/jpeg,image/bmp,image/tiff,image/webp,application/pdf"
+          onChange={(event) => void onChange(event)}
+          disabled={disabled}
+          hidden
+        />
       </div>
     </div>
   )

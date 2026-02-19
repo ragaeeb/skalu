@@ -1,91 +1,114 @@
-# Skalu Google Cloud Setup
+# Skalu Cloud Setup (Cloud Run Only, Cloud Build GitHub Deploys)
 
-This is the one-time setup for automated deploys to Cloud Run (API) and Firebase Hosting (frontend).
+This setup deploys both backend API and frontend UI from a single Cloud Run service and a single Cloud Build trigger.
 
-## 1) Install tools
+- Runtime: Cloud Run (`skalu-api`)
+- CD: Cloud Build GitHub trigger on pushes to `main`
+- IaC: Terraform (`infra/`)
+- No Firebase required
 
-- `gcloud`
+Reference docs:
+- Cloud Build GitHub repository triggers: https://docs.cloud.google.com/build/docs/automating-builds/github/build-repos-from-github
+- Cloud Run continuous deploy quickstart: https://docs.cloud.google.com/run/docs/quickstarts/deploy-continuously
+- Cloud Build pricing: https://cloud.google.com/build/pricing
+- Cloud Run pricing: https://cloud.google.com/run/pricing
+
+## 1) Install tools (first-time setup on macOS with Homebrew)
+
+### 1.1 Install Homebrew (if not installed)
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Then add Brew to your shell (Apple Silicon):
+
+```bash
+echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+
+### 1.2 Install required CLIs
+
+```bash
+brew update
+brew install --cask google-cloud-sdk
+brew install terraform bun uv
+```
+
+### 1.3 Verify tool versions
+
+```bash
+gcloud version
+terraform version
+bun --version
+uv --version
+```
+
+Expected minimums:
 - `terraform >= 1.9`
-- `firebase-tools`
 - `bun >= 1.3.9`
-- `uv`
 
-## 2) Create/select GCP project
+### 1.4 Authenticate gcloud
 
 ```bash
 gcloud auth login
 gcloud auth application-default login
-gcloud config set project YOUR_PROJECT_ID
 ```
 
-Enable required services:
+## 2) Fast path bootstrap
+
+Run:
 
 ```bash
-gcloud services enable \
-  cloudresourcemanager.googleapis.com \
-  iam.googleapis.com \
-  iamcredentials.googleapis.com \
-  run.googleapis.com \
-  artifactregistry.googleapis.com \
-  firebase.googleapis.com \
-  firebasehosting.googleapis.com \
-  storage.googleapis.com
+scripts/bootstrap_cloud.sh \
+  --project-id YOUR_PROJECT_ID \
+  --github-owner YOUR_GITHUB_OWNER \
+  --github-repo skalu \
+  --region us-central1 \
+  --allowed-origins "*" \
+  --run-terraform-apply
 ```
 
-## 3) Create Terraform state bucket
+What this does:
+- sets gcloud project
+- enables required APIs
+- creates Terraform state bucket
+- runs Terraform init/plan/apply
+- creates Artifact Registry, Cloud Run service, Cloud Build trigger, and IAM bindings
+
+## 3) One-time GitHub connection in Cloud Build
+
+Cloud Build requires one interactive authorization to install/authorize the Cloud Build GitHub App for your repo.
+
+In GCP Console:
+1. Go to Cloud Build -> Triggers.
+2. Click **Connect repository**.
+3. Select GitHub and authorize the app for your org/repo.
+4. Confirm your repo is visible to Cloud Build.
+
+After this, Terraform-managed trigger (`skalu-api-deploy`) will fire on pushes to `main`.
+
+## 4) Verify Terraform outputs
 
 ```bash
-gsutil mb -l us-central1 gs://skalu-tfstate-YOUR_PROJECT_ID
-gsutil versioning set on gs://skalu-tfstate-YOUR_PROJECT_ID
+terraform -chdir=infra output
 ```
 
-Initialize Terraform with backend bucket parameter:
+Important outputs:
+- `api_url`
+- `api_deploy_trigger_id`
+- `cloudbuild_deployer_service_account`
+
+## 5) Local verification (recommended before first push)
+
+Backend + frontend together:
 
 ```bash
-cd infra
-terraform init -backend-config="bucket=skalu-tfstate-YOUR_PROJECT_ID"
+./dev_up.sh
 ```
 
-## 4) Configure tfvars and apply
-
-```bash
-cp terraform.tfvars.example terraform.tfvars
-```
-
-Edit `terraform.tfvars` values, then:
-
-```bash
-terraform plan
-terraform apply
-```
-
-Capture outputs:
-
-```bash
-terraform output
-```
-
-## 5) Configure Firebase
-
-```bash
-firebase login
-firebase projects:addfirebase YOUR_PROJECT_ID
-firebase login:ci
-```
-
-Save the token from `firebase login:ci` as `FIREBASE_TOKEN` in GitHub secrets.
-
-## 6) Required GitHub secrets
-
-Add in repository settings:
-
-- `GCP_PROJECT_ID`
-- `GCP_WORKLOAD_IDENTITY_PROVIDER` (Terraform output)
-- `GCP_SERVICE_ACCOUNT` (Terraform output)
-- `VITE_API_URL` (Terraform `api_url` output)
-- `FIREBASE_TOKEN` (from `firebase login:ci`)
-
-## 7) Local verification
+Or separate:
 
 Backend:
 
@@ -103,12 +126,30 @@ Frontend:
 cd frontend
 bun install
 bun run test
-bunx playwright install chromium
-bunx playwright test
 bun run build
 ```
 
-## 8) Deploy triggers
+## 6) Deploy flow
 
-- Push backend changes to `main` to trigger `deploy-api.yml`.
-- Push frontend changes to `main` to trigger `deploy-frontend.yml`.
+Push to `main`:
+- changes matching trigger paths run `cloudbuild/api.cloudbuild.yaml`
+- pipeline runs frontend tests, builds bundled image, deploys Cloud Run, and smoke-checks `/health` + `/version`
+
+## 7) Post-deploy checks
+
+```bash
+API_URL="$(terraform -chdir=infra output -raw api_url)"
+curl -fsS "${API_URL}/health"
+curl -fsS "${API_URL}/version"
+```
+
+## 8) Troubleshooting
+
+- Trigger not firing:
+  - verify Cloud Build GitHub connection is installed for the repo.
+  - verify trigger branch regex is `^main$`.
+- Cloud Run deploy permission failure:
+  - ensure Cloud Build deployer service account has `roles/run.admin`, `roles/artifactregistry.writer`, and `roles/iam.serviceAccountUser`.
+- Frontend not rendering on Cloud Run:
+  - confirm container includes `frontend/dist` build output.
+  - verify `/` on Cloud Run returns `index.html`.

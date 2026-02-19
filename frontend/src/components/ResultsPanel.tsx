@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { downloadUrl, fetchResults } from "@/lib/api"
-import type { DetectionParams, ResultsResponse } from "@/types"
+import type { AnalyzePayload, DetectionParams } from "@/types"
 
 type ResultsPanelProps = {
-  jobId: string | null
-  ready: boolean
-  defaultWithViz: boolean
+  result: AnalyzePayload | null
 }
 
 type PageData = {
@@ -29,6 +26,15 @@ const parseResultJson = (jsonString: string): ParsedResult => {
   } catch {
     return { pages: [] }
   }
+}
+
+const parsePageNumberFromLabel = (label: string): number | null => {
+  const match = label.match(/page\s+(\d+)/i)
+  if (!match) {
+    return null
+  }
+  const pageNumber = Number(match[1])
+  return Number.isFinite(pageNumber) ? pageNumber : null
 }
 
 const DetectionParamsPanel = ({ params }: { params: DetectionParams | undefined }) => {
@@ -141,48 +147,51 @@ const PageRow = ({
   )
 }
 
-export const ResultsPanel = ({ jobId, ready, defaultWithViz }: ResultsPanelProps) => {
-  const [results, setResults] = useState<ResultsResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [withViz, setWithViz] = useState(defaultWithViz)
+export const ResultsPanel = ({ result }: ResultsPanelProps) => {
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const parentRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    setWithViz(defaultWithViz)
-  }, [defaultWithViz])
-
-  useEffect(() => {
-    if (!ready || !jobId) {
+    if (!result?.result_json) {
+      if (downloadUrl) {
+        URL.revokeObjectURL(downloadUrl)
+      }
+      setDownloadUrl(null)
       return
     }
 
-    const run = async (): Promise<void> => {
-      try {
-        setError(null)
-        const data = await fetchResults(jobId, withViz)
-        setResults(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load results")
-      }
-    }
+    const blob = new Blob([result.result_json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    setDownloadUrl(url)
 
-    void run()
-  }, [ready, jobId, withViz])
+    return () => {
+      URL.revokeObjectURL(url)
+    }
+  }, [result?.result_json])
 
   const parsedResult = useMemo(() => {
-    if (!results?.result_json) return null
-    return parseResultJson(results.result_json)
-  }, [results])
+    if (!result?.result_json) return null
+    return parseResultJson(result.result_json)
+  }, [result])
 
   const sortedPages = useMemo(() => {
     if (!parsedResult?.pages) return []
-    const visualizations = results?.visualizations
+    const visualizations = result?.visualizations
+    const visualizationByPage = new Map<number, string>()
+
+    for (const visualization of visualizations ?? []) {
+      const pageNumber = parsePageNumberFromLabel(visualization.label)
+      if (pageNumber !== null) {
+        visualizationByPage.set(pageNumber, visualization.data_url)
+      }
+    }
+
     return parsedResult.pages.map((page, index) => ({
       pageData: page,
-      imageUrl: visualizations?.[index]?.data_url,
+      imageUrl: visualizationByPage.get(page.page) ?? visualizations?.[index]?.data_url,
       pageNumber: page.page,
     }))
-  }, [parsedResult, results])
+  }, [parsedResult, result])
 
   const rowVirtualizer = useVirtualizer({
     count: sortedPages.length,
@@ -191,30 +200,27 @@ export const ResultsPanel = ({ jobId, ready, defaultWithViz }: ResultsPanelProps
     overscan: 3,
   })
 
-  if (!jobId) {
-    return null
-  }
-
   return (
     <div className="panel" data-testid="results-panel">
-      <div style={{ marginBottom: "1rem" }}>
-        <label style={{ display: "inline-flex", gap: "0.4rem", alignItems: "center", color: "#475569", cursor: "pointer" }}>
-          <input type="checkbox" checked={withViz} onChange={(event) => setWithViz(event.target.checked)} />
-          Include visualizations in response
-        </label>
-      </div>
-
-      {error ? <p style={{ color: "#dc2626", marginBottom: "1rem" }}>{error}</p> : null}
-
-      {results ? (
+      {result ? (
         <>
+          <p style={{ marginTop: 0, marginBottom: "0.75rem", color: "#334155", fontSize: "0.9rem" }}>
+            Processed file: <strong>{result.processed_filename}</strong>
+          </p>
+
           <DetectionParamsPanel params={parsedResult?.detection_params} />
 
-          <div style={{ marginBottom: "1rem" }}>
-            <a href={downloadUrl(jobId)} download={results.download_filename} style={{ color: "#0f766e", textDecoration: "none", fontWeight: 500 }}>
-              Download Full JSON
-            </a>
-          </div>
+          {downloadUrl ? (
+            <div style={{ marginBottom: "1rem" }}>
+              <a
+                href={downloadUrl}
+                download={`${result.processed_filename.replace(/\.[^.]+$/, "")}_results.json`}
+                style={{ color: "#0f766e", textDecoration: "none", fontWeight: 500 }}
+              >
+                Download Full JSON
+              </a>
+            </div>
+          ) : null}
 
           {sortedPages.length > 0 ? (
             <div
@@ -264,7 +270,7 @@ export const ResultsPanel = ({ jobId, ready, defaultWithViz }: ResultsPanelProps
           )}
         </>
       ) : (
-        <p style={{ color: "#64748b" }}>Waiting for results...</p>
+        <p style={{ color: "#64748b" }}>No results yet. Select a file and click Process.</p>
       )}
     </div>
   )

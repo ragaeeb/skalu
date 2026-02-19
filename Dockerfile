@@ -1,3 +1,13 @@
+FROM oven/bun:1.3.9 AS frontend-builder
+
+WORKDIR /app/frontend
+COPY frontend ./frontend
+
+WORKDIR /app/frontend/frontend
+RUN bun install --frozen-lockfile
+RUN bun run build
+
+
 FROM python:3.14-slim
 
 RUN apt-get update && \
@@ -17,7 +27,9 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN uv pip install --system --no-cache -r requirements.txt
 
-COPY app.py demo_utils.py skalu.py ./
+COPY app.py demo_utils.py skalu.py pyproject.toml ./
+COPY backend ./backend
+COPY --from=frontend-builder /app/frontend/frontend/dist ./frontend/dist
 
 RUN useradd --create-home appuser && chown -R appuser /app
 USER appuser

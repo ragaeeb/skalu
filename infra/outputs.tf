@@ -8,12 +8,12 @@ output "artifact_registry_repo" {
   value       = "${var.region}-docker.pkg.dev/${var.project_id}/skalu/api"
 }
 
-output "workload_identity_provider" {
-  description = "WIF provider - add as GCP_WORKLOAD_IDENTITY_PROVIDER GitHub secret"
-  value       = google_iam_workload_identity_pool_provider.github.name
+output "cloudbuild_deployer_service_account" {
+  description = "Cloud Build deployer service account email"
+  value       = google_service_account.cloudbuild_deployer.email
 }
 
-output "github_actions_service_account" {
-  description = "SA email - add as GCP_SERVICE_ACCOUNT GitHub secret"
-  value       = google_service_account.github_actions.email
+output "api_deploy_trigger_id" {
+  description = "Cloud Build trigger ID for API deploys"
+  value       = google_cloudbuild_trigger.api_deploy.trigger_id
 }
