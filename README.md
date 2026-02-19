@@ -1,328 +1,111 @@
 # skalu
 
-<div align="center">
-  <img src="https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d.svg" />
-  <a href="https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
-  <img src="https://img.shields.io/badge/podman-v5.5.2-purple.svg" alt="Podman: v5.5.2" />
-</div>
+Skalu extracts horizontal lines and rectangles from images and PDFs, with a Flask API backend and a React frontend.
 
-## Overview
+## Architecture
 
-Skalu is a Python tool for detecting horizontal lines and rectangles in images and PDFs. It's particularly useful for document analysis, form processing, and table structure extraction. The tool uses computer vision techniques to identify structural elements and outputs structured data about their positions.
+- Backend API: Flask (`app.py`) deployed to Google Cloud Run
+- Frontend: Vite + React + TypeScript in `frontend/`, deployed to Firebase Hosting
+- Infrastructure: Terraform in `infra/`
+- CI/CD: GitHub Actions + Workload Identity Federation
+- Frontend package manager and scripts: Bun
 
-### Key Features
+## Prerequisites
 
-- **Structure Detection**: Identify horizontal lines and rectangles (including squares)
-- **Single Image Processing**: Detect structures in individual images
-- **PDF Processing**: Extract structures from PDF documents page by page
-- **Batch Processing**: Process entire folders of images at once
-- **JSON Output**: Get structured data about detected elements
-- **Smart Filtering**: Only include pages/images with detected structures
-- **Visual Debugging**: Generate annotated images showing detected structures
-- **Configurable Parameters**: Adjust detection sensitivity for different structure types
-- **Versioned CLI**: Check the currently installed release with `python skalu.py --version` (v1.0.1)
-- **Docker Support**: Run anywhere with containerization
-- **Google Colab Integration**: Process files in the cloud
+- Python 3.14
+- Bun 1.3.9+
+- `uv`
+- gcloud CLI
+- Terraform 1.9+
+- Firebase CLI
 
-## Web Demo
+## Local development
 
-You can explore Skalu through a lightweight Flask web demo that accepts PDF and image uploads and shows the detected rectangles and horizontal lines.
-
-- **Real-time feedback** – uploads run asynchronously so the page displays live progress as each page is analyzed.
-- **Inline insights** – once finished, the app renders summaries, visualizations, debug frames, and a downloadable JSON payload without refreshing the page.
-
-### Run the demo locally
+### One-command startup
 
 ```bash
-uv venv --python 3.13
+./dev_up.sh
+```
+
+This launches:
+- Backend on `http://localhost:8080`
+- Frontend on `http://localhost:5173`
+
+The script traps kill signals and shuts both processes down together.
+
+### Backend only
+
+```bash
+uv venv --python 3.14 .venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
-FLASK_APP=app.py flask run
+uv pip install -r requirements_dev.txt
+python app.py
 ```
 
-Then open <http://127.0.0.1:5000> in your browser, upload a document, and review the JSON output directly in the page. The demo now renders annotated visualizations, surfaces the intermediate debug frames when available, and lets you download the structured results as a JSON file with one click.
-
-### Deploy to Render
-
-1. Push this repository to your own GitHub account.
-2. Create a new **Web Service** on [Render](https://render.com/) and connect it to your fork.
-3. When prompted, enable the **Auto-detect settings from render.yaml** option.
-4. Deploy. Render will run `uv pip install --system -r requirements.txt` and start the server with `gunicorn app:app`.
-
-The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
-
-### Deploy to Streamlit Cloud
-
-You can ship the same experience to [Streamlit Community Cloud](https://streamlit.io/cloud) with the dedicated `streamlit_app.py` entry point.
-
-1. Add this repository to Streamlit Cloud and choose **streamlit_app.py** as the app file.
-2. Make sure the environment installs the `requirements.txt` dependencies. Streamlit Cloud supports [`uv`](https://docs.streamlit.io/streamlit-community-cloud/deploy-your-app/app-dependencies) so the recommended install command is `uv pip install --system -r requirements.txt`.
-3. Once deployed, the UI mirrors the Render demo: upload a PDF or image, watch live progress, review inline visualizations/debug frames, and download the JSON results.
-
-To try it locally, run:
+### Frontend only
 
 ```bash
-streamlit run streamlit_app.py
+cd frontend
+cp .env.example .env.local
+bun install
+bun run dev
 ```
 
-Streamlit caches no intermediate files, so each run stores artifacts in a temporary workspace, streams results to the browser, and cleans up after completion.
-
-## Installation
-
-### Local Installation
-
-1. Clone this repository:
-
-   ```bash
-   git clone https://github.com/yourusername/skalu.git
-   cd skalu
-   ```
-
-2. Create a local environment and install dependencies with [`uv`](https://github.com/astral-sh/uv):
-   ```bash
-   uv venv --python 3.13
-   source .venv/bin/activate
-   uv pip install -r requirements_dev.txt
-   ```
-   The base `requirements.txt` lists the runtime packages while
-   `requirements_dev.txt` adds the testing toolchain used by CI.
-
-### Docker Installation
-
-```bash
-# Build the Docker image
-docker build -t skalu .
-
-# Start the web demo on http://localhost:10000
-docker run -p 10000:10000 skalu
-
-# Run the batch processor against a mounted volume
-docker run -v /path/to/your/images:/data skalu all
-
-# Process a single file inside the container
-docker run -v /path/to/your/file.pdf:/data/file.pdf skalu /data/file.pdf
-```
-
-## Usage
-
-### Command Line Interface
-
-```bash
-# Check the installed version
-python skalu.py --version
-
-# Process a single image
-python skalu.py path/to/image.jpg
-
-# Process a PDF document
-python skalu.py path/to/document.pdf
-
-# Process a folder of images
-python skalu.py path/to/folder/
-
-# Specify custom output JSON path
-python skalu.py path/to/image.jpg --output results.json
-
-# Process PDF with custom output filename
-python skalu.py document.pdf -o pdf_results.json
-
-# Adjust detection parameters for lines
-python skalu.py path/to/image.jpg --min-width-ratio 0.3 --max-height 15
-
-# Adjust detection parameters for rectangles
-python skalu.py path/to/image.jpg --min-rect-area 0.002 --max-rect-area 0.4
-
-# Generate debug images and visualizations
-python skalu.py document.pdf --debug-dir debug_output --save-viz
-```
-
-### Parameters
-
-- **Line Detection**:
-
-  - `--min-width-ratio`: Minimum width ratio of detected lines compared to image width (default: 0.2)
-  - `--max-height`: Maximum height in pixels for a detected line (default: 10)
-
-- **Rectangle Detection**:
-
-  - `--min-rect-area`: Minimum rectangle area as a fraction of image area (default: 0.001)
-  - `--max-rect-area`: Maximum rectangle area as a fraction of image area (default: 0.5)
-
-- **General**:
-  - `--output`, `-o`: Custom output path for results JSON
-  - `--debug-dir`: Directory for storing intermediate processing images
-  - `--save-viz`: Save visualization of detected structures
+Frontend proxies API routes to `http://localhost:8080` in dev mode.
 
 ## Testing
 
-Run the full suite—including the CLI integration test that validates PDF
-processing end to end—after installing `requirements_dev.txt`:
+### Backend tests
 
 ```bash
-uv run pytest -v
+source .venv/bin/activate
+pytest -q
 ```
 
-To generate coverage reports:
+### Frontend unit + integration (`bun:test`)
 
 ```bash
-uv run pytest --cov=skalu --cov-report=term --cov-report=html
+cd frontend
+bun run test
 ```
 
-The integration test exercises `python skalu.py tests/test.pdf` and compares the
-output JSON to `tests/expected_test_results.json`, ensuring the public CLI stays
-aligned with the reference data set.
+### Frontend E2E (Playwright)
 
-## Output Format
-
-### Image Processing
-
-Skalu generates a JSON file with detailed information about the detected structures:
-
-```json
-{
-  "result": {
-    "example.jpg": {
-      "dpi": {
-        "width": 1240,
-        "height": 1754,
-        "x": 300,
-        "y": 300
-      },
-      "horizontal_lines": [
-        {
-          "x": 120,
-          "y": 350,
-          "width": 1000,
-          "height": 2
-        },
-        {
-          "x": 120,
-          "y": 700,
-          "width": 1000,
-          "height": 2
-        }
-      ],
-      "rectangles": [
-        {
-          "x": 200,
-          "y": 150,
-          "width": 400,
-          "height": 300
-        },
-        {
-          "x": 650,
-          "y": 450,
-          "width": 250,
-          "height": 250
-        }
-      ]
-    }
-  },
-  "detection_params": {
-    "min_line_width_ratio": 0.2,
-    "max_line_height": 10,
-    "min_rect_area_ratio": 0.001,
-    "max_rect_area_ratio": 0.5
-  }
-}
+```bash
+cd frontend
+bunx playwright install chromium
+bunx playwright test
 ```
 
-### PDF Processing
+## API highlights
 
-For PDF files, the output format includes page-by-page results:
+- Health check: `GET /health`
+- Start analysis: `POST /analyze` (returns `202` + `job_id`)
+- Poll status: `GET /progress/<job_id>`
+- Fetch results: `GET /results/<job_id>`
+- Include image payloads: `GET /results/<job_id>?viz=true`
+- Download JSON: `GET /download/<job_id>`
 
-```json
-{
-  "dpi": {
-    "x": 200,
-    "y": 200
-  },
-  "pages": [
-    {
-      "page": 1,
-      "width": 1654,
-      "height": 2339,
-      "horizontal_lines": [
-        {
-          "x": 150,
-          "y": 400,
-          "width": 1200,
-          "height": 3
-        }
-      ],
-      "rectangles": [
-        {
-          "x": 200,
-          "y": 150,
-          "width": 400,
-          "height": 300
-        }
-      ]
-    },
-    {
-      "page": 3,
-      "width": 1654,
-      "height": 2339,
-      "horizontal_lines": [
-        {
-          "x": 100,
-          "y": 800,
-          "width": 1400,
-          "height": 2
-        }
-      ]
-    }
-  ],
-  "detection_params": {
-    "min_line_width_ratio": 0.2,
-    "max_line_height": 10,
-    "min_rect_area_ratio": 0.001,
-    "max_rect_area_ratio": 0.5
-  }
-}
-```
+## Deploy setup (GCP)
 
-**Notes**: 
-- The output only includes structure types (`horizontal_lines` or `rectangles`) that are actually detected.
-- For PDFs, only pages containing at least one horizontal line OR rectangle are included in the results.
-- PDF pages are rendered at 200 DPI for high-quality structure detection.
+1. Configure GCP project + billing.
+2. Create Terraform state bucket.
+3. Initialize Terraform backend with bucket:
+   - `terraform init -backend-config="bucket=skalu-tfstate-YOUR_PROJECT_ID"`
+4. Apply Terraform in `infra/`.
+5. Add GitHub secrets:
+   - `GCP_PROJECT_ID`
+   - `GCP_WORKLOAD_IDENTITY_PROVIDER`
+   - `GCP_SERVICE_ACCOUNT`
+   - `VITE_API_URL`
+   - `FIREBASE_TOKEN`
+6. Push to `main`.
 
-## Google Colab
+Detailed setup is in [`cloud_setup.md`](cloud_setup.md).
 
-You can use Skalu directly in Google Colab without any local installation:
+## CI workflows
 
-1. Open the [Skalu Colab Notebook](https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb)
-2. Upload your images or PDFs using the file browser
-3. Run the notebook to process all files
-4. Download the results
-
-## Use Cases
-
-- Extract table structures from scanned documents and PDFs
-- Process form fields by identifying separator lines and bounding boxes
-- Detect paragraph/section divisions in documents
-- Identify form field boxes and checkboxes in PDF forms
-- Prepare images for OCR by understanding document layout
-- Detect rectangular regions of interest in diagrams and charts
-- Batch process multi-page PDF documents for structure analysis
-- Filter PDF pages based on structural content
-
-## Supported Formats
-
-- **Images**: JPG, JPEG, PNG, BMP, TIFF, WebP
-- **Documents**: PDF (multi-page support)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- `.github/workflows/test.yml`: Python tests (uv + Python 3.14)
+- `.github/workflows/release.yml`: semantic release
+- `.github/workflows/deploy-api.yml`: Docker build/push + Cloud Run deploy
+- `.github/workflows/deploy-frontend.yml`: Bun tests, Playwright, Firebase deploy

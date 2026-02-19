@@ -11,26 +11,21 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Python 3.14
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.13'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: '3.13'
+          python-version: "3.14"
           enable-cache: true
 
       - name: Install Python Semantic Release
-        run: |
-          uv tool install --no-progress python-semantic-release
+        run: uv tool install --no-progress python-semantic-release
 
       - name: Semantic Release
         env:

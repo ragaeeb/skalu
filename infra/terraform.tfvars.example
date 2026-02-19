@@ -1,0 +1,5 @@
+project_id      = "your-gcp-project-id"
+region          = "us-central1"
+github_owner    = "your-github-username"
+github_repo     = "skalu"
+allowed_origins = "https://your-project.web.app,https://your-project.firebaseapp.com"
