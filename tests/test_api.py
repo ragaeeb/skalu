@@ -61,16 +61,14 @@ def test_version(client):
 
 def test_analyze_non_stream_success(client, monkeypatch):
     expected = {
-        "result_json": "{\"pages\":[]}",
-        "result_data": {"pages": []},
-        "summary": {"type": "pdf", "pages": []},
-        "processed_filename": "sample.pdf",
         "detection_params": {
             "min_line_width_ratio": 0.2,
             "max_line_height": 10,
             "min_rect_area_ratio": 0.001,
             "max_rect_area_ratio": 0.5,
         },
+        "result_data": {"pages": [], "dpi": {"x": 144, "y": 144}},
+        "processed_filename": "sample.pdf",
         "visualizations": [],
         "debug_groups": [],
     }
@@ -110,16 +108,14 @@ def test_analyze_stream_success_event_order(client, monkeypatch):
         {
             "type": "result",
             "payload": {
-                "result_json": "{\"pages\":[]}",
-                "result_data": {"pages": []},
-                "summary": {"type": "pdf", "pages": []},
-                "processed_filename": "sample.pdf",
                 "detection_params": {
                     "min_line_width_ratio": 0.2,
                     "max_line_height": 10,
                     "min_rect_area_ratio": 0.001,
                     "max_rect_area_ratio": 0.5,
                 },
+                "result_data": {"pages": [], "dpi": {"x": 144, "y": 144}},
+                "processed_filename": "sample.pdf",
                 "visualizations": [],
                 "debug_groups": [],
             },
@@ -196,16 +192,14 @@ def test_analyze_invalid_file_type_returns_bad_input(client):
 
 def test_analyze_remote_pdf_url_non_stream_success(client, monkeypatch):
     expected = {
-        "result_json": "{\"pages\":[]}",
-        "result_data": {"pages": []},
-        "summary": {"type": "pdf", "pages": []},
-        "processed_filename": "remote.pdf",
         "detection_params": {
             "min_line_width_ratio": 0.2,
             "max_line_height": 10,
             "min_rect_area_ratio": 0.001,
             "max_rect_area_ratio": 0.5,
         },
+        "result_data": {"pages": [], "dpi": {"x": 144, "y": 144}},
+        "processed_filename": "remote.pdf",
         "visualizations": [],
         "debug_groups": [],
     }

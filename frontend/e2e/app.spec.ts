@@ -9,23 +9,10 @@ const buildResultPayload = () => ({
         min_rect_area_ratio: 0.001,
     },
     processed_filename: 'test.pdf',
-    result_data: { pages: [{ height: 1600, page: 1, width: 1200 }] },
-    result_json: JSON.stringify(
-        {
-            detection_params: {
-                max_line_height: 10,
-                max_rect_area_ratio: 0.5,
-                min_line_width_ratio: 0.2,
-                min_rect_area_ratio: 0.001,
-            },
-            pages: [
-                { height: 1600, horizontal_lines: [{ height: 2, width: 100, x: 10, y: 20 }], page: 1, width: 1200 },
-            ],
-        },
-        null,
-        2,
-    ),
-    summary: { pages: [{ lines: 1, page: 1, rectangles: 0, size: [1200, 1600] }], type: 'pdf' },
+    result_data: {
+        pages: [{ height: 1600, horizontal_lines: [{ height: 2, width: 100, x: 10, y: 20 }], page: 1, width: 1200 }],
+        dpi: { x: 144, y: 144 },
+    },
     visualizations: [{ data_url: 'data:image/jpeg;base64,a', label: 'Page 1 detections' }],
 });
 

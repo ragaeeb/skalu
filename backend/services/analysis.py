@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Callable
 
 from demo_utils import (
-    build_summary,
     collect_debug_groups,
     collect_visualizations,
     encode_image_as_data_url,
@@ -54,10 +53,14 @@ def run_analysis(workdir: str, filename: str, options: AnalyzeOptions, progress_
         raise ProcessingError("Processing failed - please try another file.")
 
     with output_json_path.open("r", encoding="utf-8") as fh:
-        result_data = json.load(fh)
+        loaded_result_data = json.load(fh)
 
-    result_json = json.dumps(result_data, indent=4, ensure_ascii=False)
-    summary = build_summary(result_data)
+    if isinstance(loaded_result_data, dict):
+        result_data = dict(loaded_result_data)
+        detection_params = result_data.pop("detection_params", None)
+    else:
+        result_data = loaded_result_data
+        detection_params = None
 
     visualizations = []
     debug_groups = []
@@ -77,11 +80,9 @@ def run_analysis(workdir: str, filename: str, options: AnalyzeOptions, progress_
                 debug_groups.append({"title": group["title"], "images": images})
 
     return {
-        "result_json": result_json,
+        "detection_params": detection_params if detection_params is not None else params,
         "result_data": result_data,
-        "summary": summary,
         "processed_filename": filename,
-        "detection_params": result_data.get("detection_params") or params,
         "visualizations": visualizations,
         "debug_groups": debug_groups,
     }

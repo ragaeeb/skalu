@@ -17,9 +17,7 @@ const buildPayload = (): AnalyzePayload => ({
     debug_groups: [],
     detection_params: DEFAULT_OPTIONS.detection_params,
     processed_filename: 'sample.pdf',
-    result_data: { pages: [] },
-    result_json: '{"pages":[]}',
-    summary: { pages: [], type: 'pdf' },
+    result_data: { pages: [], dpi: { x: 144, y: 144 } },
     visualizations: [],
 });
 
@@ -41,7 +39,10 @@ afterEach(() => {
 describe('api helpers', () => {
     test('analyzeFile posts multipart form and returns payload', async () => {
         const payload = buildPayload();
-        const fakeFetch = mock(async () => new Response(JSON.stringify(payload), { status: 200 }));
+        const fakeFetch = mock(
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
+                new Response(JSON.stringify(payload), { status: 200 }),
+        );
         globalThis.fetch = fakeFetch as unknown as typeof fetch;
 
         const file = new File(['hello'], 'sample.pdf', { type: 'application/pdf' });
@@ -58,7 +59,8 @@ describe('api helpers', () => {
 
     test('analyzeFile throws backend error message', async () => {
         const fakeFetch = mock(
-            async () => new Response(JSON.stringify({ error: 'Unsupported file type.' }), { status: 400 }),
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
+                new Response(JSON.stringify({ error: 'Unsupported file type.' }), { status: 400 }),
         );
         globalThis.fetch = fakeFetch as unknown as typeof fetch;
 
@@ -68,7 +70,10 @@ describe('api helpers', () => {
 
     test('analyzeFile posts file_url when provided', async () => {
         const payload = buildPayload();
-        const fakeFetch = mock(async () => new Response(JSON.stringify(payload), { status: 200 }));
+        const fakeFetch = mock(
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
+                new Response(JSON.stringify(payload), { status: 200 }),
+        );
         globalThis.fetch = fakeFetch as unknown as typeof fetch;
 
         const result = await analyzeFile({ file: null, file_url: 'https://example.com/input.pdf' }, DEFAULT_OPTIONS);
@@ -91,7 +96,7 @@ describe('api helpers', () => {
         ];
 
         const fakeFetch = mock(
-            async () =>
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
                 new Response(streamFromChunks(chunks), {
                     headers: { 'Content-Type': 'application/x-ndjson' },
                     status: 200,
@@ -120,7 +125,7 @@ describe('api helpers', () => {
 
     test('analyzeFileStream throws when stream ends without terminal event', async () => {
         const fakeFetch = mock(
-            async () =>
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
                 new Response(
                     streamFromChunks([
                         '{"type":"accepted","filename":"sample.pdf","started_at":"2026-02-19T00:00:00Z"}\n',
@@ -143,7 +148,7 @@ describe('api helpers', () => {
 
     test('fetchVersion sends frontend version header', async () => {
         const fakeFetch = mock(
-            async () =>
+            async (_input: RequestInfo | URL, _init?: RequestInit) =>
                 new Response(
                     JSON.stringify({
                         backend_version: '0.2.0',

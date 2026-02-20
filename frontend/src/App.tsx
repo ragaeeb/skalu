@@ -3,7 +3,7 @@ import { DropZone } from '@/components/DropZone';
 import { JobProgress } from '@/components/JobProgress';
 import { ResultsPanel } from '@/components/ResultsPanel';
 import { analyzeFileStream, fetchVersion } from '@/lib/api';
-import type { AnalyzePayload, DetectionParams, VersionResponse } from '@/types';
+import type { AnalyzePayload, AnalyzeResultData, DetectionParams, VersionResponse } from '@/types';
 
 const DEFAULT_DETECTION_PARAMS: DetectionParams = {
     min_line_width_ratio: 0.2,
@@ -81,6 +81,14 @@ const writeQueryState = (queryState: QueryState): void => {
     const next = params.toString();
     const target = next ? `${window.location.pathname}?${next}` : window.location.pathname;
     window.history.replaceState({}, '', target);
+};
+
+const countResultItems = (resultData: AnalyzeResultData): number => {
+    if ('pages' in resultData) {
+        return resultData.pages.length;
+    }
+
+    return Object.keys(resultData.result).length;
 };
 
 const App = () => {
@@ -190,10 +198,7 @@ const App = () => {
                     },
                     onResult: (payload) => {
                         setResult(payload);
-                        const pages =
-                            payload.summary?.type === 'pdf'
-                                ? (payload.summary.pages?.length ?? 0)
-                                : (payload.summary?.items?.length ?? 1);
+                        const pages = countResultItems(payload.result_data);
                         setProgress((prev) => ({
                             ...prev,
                             status: 'finished',

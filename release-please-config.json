@@ -1,22 +1,20 @@
 {
-  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "include-component-in-tag": true,
-  "separate-pull-requests": true,
-  "packages": {
-    ".": {
-      "component": "backend",
-      "release-type": "python",
-      "package-name": "skalu-backend",
-      "changelog-path": "CHANGELOG.md",
-      "exclude-paths": [
-        "frontend/**"
-      ]
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "include-component-in-tag": true,
+    "packages": {
+        ".": {
+            "changelog-path": "CHANGELOG.md",
+            "component": "backend",
+            "exclude-paths": ["frontend/**"],
+            "package-name": "skalu-backend",
+            "release-type": "python"
+        },
+        "frontend": {
+            "changelog-path": "frontend/CHANGELOG.md",
+            "component": "frontend",
+            "package-name": "skalu-frontend",
+            "release-type": "node"
+        }
     },
-    "frontend": {
-      "component": "frontend",
-      "release-type": "node",
-      "package-name": "skalu-frontend",
-      "changelog-path": "frontend/CHANGELOG.md"
-    }
-  }
+    "separate-pull-requests": false
 }

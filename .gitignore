@@ -34,5 +34,7 @@ infra/*.tfstate.backup
 frontend/node_modules/
 frontend/dist/
 frontend/.env.local
+frontend/dist-types/*
+!frontend/dist-types/skalu-api.d.ts
 
 *.env
