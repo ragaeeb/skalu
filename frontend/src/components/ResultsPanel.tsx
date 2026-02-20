@@ -1,26 +1,8 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { AnalyzePayload, DetectionParams } from '@/types';
+import type { AnalyzePayload, AnalyzeResultData, DetectionParams, PdfPageResult } from '@/types';
 
 type ResultsPanelProps = { result: AnalyzePayload | null };
-
-type PageData = {
-    page: number;
-    width: number;
-    height: number;
-    horizontal_lines?: Array<Record<string, unknown>>;
-    rectangles?: Array<Record<string, unknown>>;
-};
-
-type ParsedResult = { dpi?: number; detection_params?: DetectionParams; pages: PageData[] };
-
-const parseResultJson = (jsonString: string): ParsedResult => {
-    try {
-        return JSON.parse(jsonString);
-    } catch {
-        return { pages: [] };
-    }
-};
 
 const parsePageNumberFromLabel = (label: string): number | null => {
     const match = label.match(/page\s+(\d+)/i);
@@ -78,7 +60,7 @@ const PageRow = ({
     imageUrl,
     pageNumber,
 }: {
-    pageData: PageData | undefined;
+    pageData: PdfPageResult | undefined;
     imageUrl: string | undefined;
     pageNumber: number;
 }) => {
@@ -175,7 +157,7 @@ export const ResultsPanel = ({ result }: ResultsPanelProps) => {
     const parentRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        if (!result?.result_json) {
+        if (!result) {
             if (downloadUrl) {
                 URL.revokeObjectURL(downloadUrl);
             }
@@ -183,24 +165,24 @@ export const ResultsPanel = ({ result }: ResultsPanelProps) => {
             return;
         }
 
-        const blob = new Blob([result.result_json], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(result.result_data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         setDownloadUrl(url);
 
         return () => {
             URL.revokeObjectURL(url);
         };
-    }, [result?.result_json]);
+    }, [result]);
 
     const parsedResult = useMemo(() => {
-        if (!result?.result_json) {
+        if (!result) {
             return null;
         }
-        return parseResultJson(result.result_json);
+        return result.result_data as AnalyzeResultData;
     }, [result]);
 
     const sortedPages = useMemo(() => {
-        if (!parsedResult?.pages) {
+        if (!parsedResult || !('pages' in parsedResult)) {
             return [];
         }
         const visualizations = result?.visualizations;
@@ -235,7 +217,7 @@ export const ResultsPanel = ({ result }: ResultsPanelProps) => {
                         Processed file: <strong>{result.processed_filename}</strong>
                     </p>
 
-                    <DetectionParamsPanel params={parsedResult?.detection_params} />
+                    <DetectionParamsPanel params={result.detection_params} />
 
                     {downloadUrl ? (
                         <div style={{ marginBottom: '1rem' }}>

@@ -11,6 +11,7 @@
 [![Google Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Serverless-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
 [![Tests](https://github.com/ragaeeb/skalu/actions/workflows/test.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/test.yml)
 [![Release Please](https://github.com/ragaeeb/skalu/actions/workflows/release.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/release.yml)
+[![Release API Types](https://github.com/ragaeeb/skalu/actions/workflows/release-types.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/release-types.yml)
 [![codecov](https://codecov.io/gh/ragaeeb/skalu/branch/main/graph/badge.svg)](https://codecov.io/gh/ragaeeb/skalu)
 
 Skalu extracts horizontal lines and rectangles from images and PDFs, with a Flask API backend and a React frontend.
@@ -107,6 +108,43 @@ cd frontend
 bunx playwright install chromium
 bunx playwright test
 ```
+
+## Type declarations
+
+Generate a client-consumable API declaration file:
+
+```bash
+cd frontend
+bun run types:generate
+```
+
+Output file:
+- `frontend/dist-types/skalu-api.d.ts`
+
+Release automation:
+- On each published GitHub Release, `.github/workflows/release-types.yml` generates and uploads `skalu-api.d.ts` as a release asset.
+
+Client usage (Vite or Next.js):
+1. Download `skalu-api.d.ts` from the release assets.
+2. Add it to your app, for example `src/types/skalu-api.d.ts`.
+3. Import the types in your API client code.
+
+Example:
+
+```ts
+import type { AnalyzePayload, AnalyzeStreamEvent } from "./types/skalu-api";
+
+export const parseAnalyzeResponse = async (res: Response): Promise<AnalyzePayload> => {
+  return res.json() as Promise<AnalyzePayload>;
+};
+
+export const parseStreamEvent = (line: string): AnalyzeStreamEvent => {
+  return JSON.parse(line) as AnalyzeStreamEvent;
+};
+```
+
+TypeScript config note:
+- Ensure your `tsconfig.json` includes your declaration location (for example `src/**/*` or `src/types/**/*`).
 
 ## API highlights
 
@@ -423,6 +461,7 @@ const analyzeFileStream = async (
 
 - `.github/workflows/test.yml`: Python tests (uv + Python 3.14)
 - `.github/workflows/release.yml`: Release Please (manifest mode for backend + frontend)
+- `.github/workflows/release-types.yml`: Generates `skalu-api.d.ts` and uploads it to published GitHub Releases
 
 ## Cloud Build pipelines
 
