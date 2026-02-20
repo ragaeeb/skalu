@@ -5,7 +5,6 @@ This setup deploys both backend API and frontend UI from a single Cloud Run serv
 - Runtime: Cloud Run (`skalu-api`)
 - CD: Cloud Build GitHub trigger on pushes to `main`
 - IaC: Terraform (`infra/`)
-- No Firebase required
 
 Reference docs:
 - Cloud Build GitHub repository triggers: https://docs.cloud.google.com/build/docs/automating-builds/github/build-repos-from-github
