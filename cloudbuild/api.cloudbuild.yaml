@@ -62,8 +62,8 @@ steps:
           --max-instances 2 \
           --memory 1Gi \
           --timeout 3600 \
-          --set-env-vars "ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},MAX_CONTENT_LENGTH=10485760,ANALYZE_TIMEOUT_SECONDS=${_ANALYZE_TIMEOUT_SECONDS},STREAM_HEARTBEAT_SECONDS=${_STREAM_HEARTBEAT_SECONDS},APP_VERSION=${BACKEND_VERSION},GIT_SHA=${COMMIT_SHA},BUILD_TIME=${BUILD_TIME}"
+          --set-env-vars "ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},MAX_CONTENT_LENGTH=10485760,ANALYZE_TIMEOUT_SECONDS=${_ANALYZE_TIMEOUT_SECONDS},STREAM_HEARTBEAT_SECONDS=${_STREAM_HEARTBEAT_SECONDS},APP_VERSION=$BACKEND_VERSION,GIT_SHA=${COMMIT_SHA},BUILD_TIME=$BUILD_TIME"
 
         SERVICE_URL="$(gcloud run services describe "${_SERVICE}" --project "${PROJECT_ID}" --region "${_REGION}" --format='value(status.url)')"
-        curl -fsS "${SERVICE_URL}/health" >/dev/null
-        curl -fsS "${SERVICE_URL}/version" >/dev/null
+        curl -fsS "$SERVICE_URL/health" >/dev/null
+        curl -fsS "$SERVICE_URL/version" >/dev/null
