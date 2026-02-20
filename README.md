@@ -1,5 +1,18 @@
 # skalu
 
+[![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![codecov](https://codecov.io/gh/ragaeeb/skalu/graph/badge.svg?token=VBJH3TR0KZ)](https://codecov.io/gh/ragaeeb/skalu)
+[![Flask](https://img.shields.io/badge/Flask-3.1.2-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![Bun](https://img.shields.io/badge/Bun-1.3.9+-fbf0df?logo=bun&logoColor=111111)](https://bun.sh/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![Terraform](https://img.shields.io/badge/Terraform-Infra-844FBA?logo=terraform&logoColor=white)](https://www.terraform.io/)
+[![wakatime](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d.svg)](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d)
+[![Google Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Serverless-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Tests](https://github.com/ragaeeb/skalu/actions/workflows/test.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/test.yml)
+[![Release Please](https://github.com/ragaeeb/skalu/actions/workflows/release.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/ragaeeb/skalu/branch/main/graph/badge.svg)](https://codecov.io/gh/ragaeeb/skalu)
+
 Skalu extracts horizontal lines and rectangles from images and PDFs, with a Flask API backend and a React frontend.
 
 ## Architecture

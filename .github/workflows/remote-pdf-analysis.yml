@@ -1,0 +1,86 @@
+name: Remote PDF Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      pdf_url:
+        description: "URL of the PDF to analyze"
+        required: true
+        type: string
+      min_width_ratio:
+        description: "Min line width ratio"
+        default: "0.2"
+        required: false
+        type: string
+      max_height:
+        description: "Max line height"
+        default: "10"
+        required: false
+        type: string
+      min_rect_area:
+        description: "Min rectangle area ratio"
+        default: "0.001"
+        required: false
+        type: string
+      max_rect_area:
+        description: "Max rectangle area ratio"
+        default: "0.5"
+        required: false
+        type: string
+      save_viz:
+        description: "Also generate visualization images"
+        default: false
+        required: false
+        type: boolean
+
+jobs:
+  analyze:
+    name: Run Remote PDF Analysis
+    runs-on: ubuntu-latest
+    if: github.actor == github.repository_owner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python 3.14
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Create virtual environment
+        run: uv venv --python 3.14 --clear
+
+      - name: Install dependencies
+        run: uv pip install -r requirements.txt
+
+      - name: Download PDF
+        run: |
+          curl -fLsS -o input.pdf "${{ github.event.inputs.pdf_url }}"
+
+      - name: Run analysis
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ github.event.inputs.save_viz }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --save-viz"
+          fi
+
+          uv run python skalu.py \
+            input.pdf \
+            --output output.json \
+            --min-width-ratio "${{ github.event.inputs.min_width_ratio }}" \
+            --max-height "${{ github.event.inputs.max_height }}" \
+            --min-rect-area "${{ github.event.inputs.min_rect_area }}" \
+            --max-rect-area "${{ github.event.inputs.max_rect_area }}" \
+            $EXTRA_ARGS
+
+      - name: Upload analysis artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: skalu-analysis-results
+          path: |
+            output.json
+            *_detected.jpg
+          if-no-files-found: error
+          retention-days: 90
