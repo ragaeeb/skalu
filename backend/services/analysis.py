@@ -11,7 +11,6 @@ from demo_utils import (
     collect_visualizations,
     encode_image_as_data_url,
 )
-from skalu import process_pdf, process_single_image
 
 from ..errors import ProcessingError
 from ..models import AnalyzeOptions
@@ -22,6 +21,9 @@ ProgressCallback = Callable[[int, int], None]
 
 def run_analysis(workdir: str, filename: str, options: AnalyzeOptions, progress_callback: ProgressCallback | None = None) -> dict:
     """Run analysis for a single uploaded file and return the final payload."""
+    # Delay heavy CV/PDF imports until analysis-time so service startup stays lightweight.
+    from skalu import process_pdf, process_single_image
+
     suffix = Path(filename).suffix.lower()
     input_path = Path(workdir) / filename
     output_json_path = Path(workdir) / "results.json"

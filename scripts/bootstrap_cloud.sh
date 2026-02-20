@@ -283,7 +283,15 @@ if [[ "${RUN_TF_APPLY}" == "true" ]]; then
   terraform -chdir="${INFRA_DIR}" untaint google_cloud_run_v2_service.api >/dev/null 2>&1 || true
 
   echo "[bootstrap] Running full terraform apply"
-  terraform -chdir="${INFRA_DIR}" apply -auto-approve
+  if ! terraform -chdir="${INFRA_DIR}" apply -auto-approve; then
+    echo >&2
+    echo "[bootstrap] Terraform apply failed." >&2
+    echo "[bootstrap] If error includes 'Repository mapping does not exist'," >&2
+    echo "[bootstrap] complete the one-time Cloud Build GitHub App repo connection in Console:" >&2
+    echo "[bootstrap] https://console.cloud.google.com/cloud-build/triggers;region=global/connect?project=${PROJECT_ID}" >&2
+    echo "[bootstrap] Then run: terraform -chdir=infra apply" >&2
+    exit 1
+  fi
 else
   echo "[bootstrap] Skipping terraform apply (use --run-terraform-apply to apply)."
 fi

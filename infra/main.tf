@@ -43,6 +43,8 @@ resource "google_cloud_run_v2_service" "api" {
 
     containers {
       image = "${var.region}-docker.pkg.dev/${var.project_id}/skalu/api:latest"
+      command = ["/usr/local/bin/python"]
+      args    = ["/app/app.py"]
 
       resources {
         limits = {

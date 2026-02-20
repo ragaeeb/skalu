@@ -233,6 +233,15 @@ curl -fsS "${API_URL}/version"
 - Trigger not firing:
   - verify Cloud Build GitHub connection is installed for the repo.
   - verify trigger branch regex is `^main$`.
+- Terraform apply fails creating Cloud Build trigger:
+  - message: `Repository mapping does not exist`
+  - meaning: one-time Cloud Build GitHub App repository connection has not been completed for this project/repo.
+  - action: open the connect flow, authorize, then rerun apply:
+
+```bash
+open "https://console.cloud.google.com/cloud-build/triggers;region=global/connect?project=YOUR_PROJECT_ID"
+terraform -chdir=infra apply
+```
 - Warning when setting project:
   - message: `project ... lacks an 'environment' tag`
   - meaning: organization policy warning/recommendation about project tagging.
@@ -290,6 +299,12 @@ scripts/bootstrap_cloud.sh \
   --allowed-origins "*" \
   --run-terraform-apply
 ```
+
+If this persists with no useful stderr/stdout logs, ensure heavy native dependencies are not imported during app startup. In this repo, `skalu.py` (OpenCV/PyMuPDF) is now lazy-imported during analysis execution, not at Flask app boot.
+
+If logs still only show `Application exec likely failed`, set an explicit container command/args in Cloud Run config instead of relying on image `CMD`. This repo now sets:
+- command: `/usr/local/bin/python`
+- args: `/app/app.py`
 - Terraform keeps failing while updating an existing broken `skalu-api` service:
   - symptom: Cloud Run service stays on a failed revision (for example `latestCreatedRevisionName` stuck on an older failed revision), often with old startup probe config.
   - action: delete the broken service and let Terraform recreate it:
