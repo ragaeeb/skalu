@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import ipaddress
-import os
 import socket
 import shutil
 import tempfile
+import hashlib
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from pathlib import Path
@@ -20,6 +20,7 @@ from ..models import AnalyzeOptions
 from ..services.streaming import encode_event_line, run_analysis_with_timeout, stream_analysis_events
 
 analyze_bp = Blueprint("analyze", __name__)
+MAX_REMOTE_FILENAME_CHARS = 120
 
 
 def _is_allowed_public_url(url: str) -> bool:
@@ -64,15 +65,32 @@ def _is_allowed_public_url(url: str) -> bool:
     return True
 
 
+def _build_remote_filename(url: str) -> str:
+    parsed = urlparse(url)
+    basename = Path(parsed.path).name or "remote.pdf"
+    secured = secure_filename(basename)
+
+    stem = Path(secured).stem or "remote"
+    suffix = Path(secured).suffix.lower()
+    if suffix != ".pdf":
+        suffix = ".pdf"
+
+    filename = f"{stem}{suffix}"
+    if len(filename) <= MAX_REMOTE_FILENAME_CHARS:
+        return filename
+
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
+    reserved = len(suffix) + len(digest) + 1
+    max_stem_len = max(1, MAX_REMOTE_FILENAME_CHARS - reserved)
+    truncated_stem = stem[:max_stem_len]
+    return f"{truncated_stem}_{digest}{suffix}"
+
+
 def fetch_remote_pdf(url: str, workspace: Path, max_bytes: int) -> str:
     if not _is_allowed_public_url(url):
         raise BadRequestError("file_url must be a public http(s) URL.")
 
-    parsed = urlparse(url)
-    basename = os.path.basename(parsed.path or "") or "remote.pdf"
-    filename = secure_filename(basename)
-    if not filename.lower().endswith(".pdf"):
-        filename = f"{filename}.pdf" if filename else "remote.pdf"
+    filename = _build_remote_filename(url)
 
     destination = workspace / filename
     request_obj = Request(

@@ -4,6 +4,7 @@ import io
 import json
 from pathlib import Path
 import sys
+from urllib.parse import quote
 
 import pytest
 
@@ -13,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend import create_app
 from backend.errors import AnalysisTimeoutError
+from backend.routes import analyze as analyze_route
 
 
 @pytest.fixture
@@ -281,3 +283,43 @@ def test_analyze_rejects_both_file_and_file_url(client):
 
     assert response.status_code == 400
     assert payload["code"] == "bad_input"
+
+
+def test_fetch_remote_pdf_truncates_long_remote_filename(tmp_path, monkeypatch):
+    class FakeResponse:
+        def __init__(self, data: bytes):
+            self._data = data
+            self._offset = 0
+            self.headers = {
+                "Content-Length": str(len(data)),
+                "Content-Type": "application/pdf",
+            }
+
+        def read(self, size: int = -1) -> bytes:
+            if size < 0:
+                size = len(self._data) - self._offset
+            chunk = self._data[self._offset:self._offset + size]
+            self._offset += len(chunk)
+            return chunk
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    remote_bytes = b"%PDF-1.4 fake remote content"
+
+    def fake_urlopen(*_args, **_kwargs):
+        return FakeResponse(remote_bytes)
+
+    monkeypatch.setattr(analyze_route, "_is_allowed_public_url", lambda _url: True)
+    monkeypatch.setattr(analyze_route, "urlopen", fake_urlopen)
+
+    long_name = "ا" * 300
+    long_url = f"https://example.com/{quote(long_name)}.pdf"
+    filename = analyze_route.fetch_remote_pdf(long_url, tmp_path, max_bytes=10_000_000)
+
+    assert filename.endswith(".pdf")
+    assert len(filename) <= analyze_route.MAX_REMOTE_FILENAME_CHARS
+    assert (tmp_path / filename).read_bytes() == remote_bytes

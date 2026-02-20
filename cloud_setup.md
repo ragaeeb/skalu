@@ -327,3 +327,49 @@ terraform -chdir=infra apply
 - Frontend not rendering on Cloud Run:
   - confirm container includes `frontend/dist` build output.
   - verify `/` on Cloud Run returns `index.html`.
+
+## 10) Monitoring and logs
+
+### Cloud Build deploy logs
+
+List recent builds:
+
+```bash
+gcloud builds list --project YOUR_PROJECT_ID --region us-central1 --limit=20
+```
+
+Stream a specific build:
+
+```bash
+gcloud builds log --project YOUR_PROJECT_ID --region us-central1 --stream BUILD_ID
+```
+
+Console path:
+- Cloud Build -> History
+
+### Cloud Run service logs
+
+Tail logs:
+
+```bash
+gcloud run services logs tail skalu-api --project YOUR_PROJECT_ID --region us-central1
+```
+
+Read recent logs:
+
+```bash
+gcloud run services logs read skalu-api --project YOUR_PROJECT_ID --region us-central1 --limit=200
+```
+
+Read one revision:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="skalu-api" AND resource.labels.revision_name="REVISION_NAME"' \
+  --project YOUR_PROJECT_ID \
+  --limit=200
+```
+
+Console path:
+- Cloud Run -> `skalu-api` -> Logs
+- Logging -> Logs Explorer

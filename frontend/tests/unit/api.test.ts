@@ -45,7 +45,7 @@ describe("api helpers", () => {
     globalThis.fetch = fakeFetch as unknown as typeof fetch
 
     const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
-    const result = await analyzeFile(file, DEFAULT_OPTIONS)
+    const result = await analyzeFile({ file, file_url: null }, DEFAULT_OPTIONS)
 
     expect(result.processed_filename).toBe("sample.pdf")
     expect(fakeFetch).toHaveBeenCalledTimes(1)
@@ -61,7 +61,20 @@ describe("api helpers", () => {
     globalThis.fetch = fakeFetch as unknown as typeof fetch
 
     const file = new File(["hello"], "bad.txt", { type: "text/plain" })
-    await expect(analyzeFile(file, DEFAULT_OPTIONS)).rejects.toThrow("Unsupported file type.")
+    await expect(analyzeFile({ file, file_url: null }, DEFAULT_OPTIONS)).rejects.toThrow("Unsupported file type.")
+  })
+
+  test("analyzeFile posts file_url when provided", async () => {
+    const payload = buildPayload()
+    const fakeFetch = mock(async () => new Response(JSON.stringify(payload), { status: 200 }))
+    globalThis.fetch = fakeFetch as unknown as typeof fetch
+
+    const result = await analyzeFile({ file: null, file_url: "https://example.com/input.pdf" }, DEFAULT_OPTIONS)
+
+    expect(result.processed_filename).toBe("sample.pdf")
+    const request = fakeFetch.mock.calls[0]?.[1] as { body?: FormData } | undefined
+    expect(request?.body?.get("file")).toBeNull()
+    expect(request?.body?.get("file_url")).toBe("https://example.com/input.pdf")
   })
 
   test("analyzeFileStream parses split NDJSON chunks and ignores malformed lines", async () => {
@@ -90,7 +103,7 @@ describe("api helpers", () => {
     const error = mock(() => {})
 
     const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
-    await analyzeFileStream(file, DEFAULT_OPTIONS, {
+    await analyzeFileStream({ file, file_url: null }, DEFAULT_OPTIONS, {
       onAccepted: accepted,
       onProgress: progress,
       onResult: result,
@@ -115,7 +128,7 @@ describe("api helpers", () => {
 
     const file = new File(["hello"], "sample.pdf", { type: "application/pdf" })
     await expect(
-      analyzeFileStream(file, DEFAULT_OPTIONS, {
+      analyzeFileStream({ file, file_url: null }, DEFAULT_OPTIONS, {
         onAccepted: () => {},
         onProgress: () => {},
         onResult: () => {},

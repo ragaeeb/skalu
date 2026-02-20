@@ -46,7 +46,6 @@ python app.py
 
 ```bash
 cd frontend
-cp .env.example .env.local
 bun install
 bun run dev
 ```
@@ -214,8 +213,77 @@ When `file_url` is provided, the API enforces sanity checks before processing:
    - `curl -fsS "${API_URL}/health"`
    - `curl -fsS "${API_URL}/version"`
 7. Push to `main` to trigger deploys via Cloud Build.
+   - Note: trigger runs when changed files match configured deploy paths (`backend/**`, `frontend/**`, `Dockerfile`, etc.).
 
 Detailed setup is in [`cloud_setup.md`](cloud_setup.md).
+
+## Monitoring and logs
+
+### Local development logs
+
+- Combined local logs (backend + frontend):
+
+```bash
+./dev_up.sh
+```
+
+- Backend only logs:
+
+```bash
+source .venv/bin/activate
+python app.py
+```
+
+- Frontend only logs:
+
+```bash
+cd frontend
+bun run dev
+```
+
+### Cloud Build deploy logs
+
+- List recent builds:
+
+```bash
+gcloud builds list --project YOUR_PROJECT_ID --region us-central1 --limit=20
+```
+
+- Stream a build:
+
+```bash
+gcloud builds log --project YOUR_PROJECT_ID --region us-central1 --stream BUILD_ID
+```
+
+- Console:
+  - Cloud Build -> History
+
+### Cloud Run service/revision logs (API + frontend container)
+
+- Tail service logs:
+
+```bash
+gcloud run services logs tail skalu-api --project YOUR_PROJECT_ID --region us-central1
+```
+
+- Read recent logs:
+
+```bash
+gcloud run services logs read skalu-api --project YOUR_PROJECT_ID --region us-central1 --limit=200
+```
+
+- Read logs for one specific revision:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="skalu-api" AND resource.labels.revision_name="REVISION_NAME"' \
+  --project YOUR_PROJECT_ID \
+  --limit=200
+```
+
+- Console:
+  - Cloud Run -> `skalu-api` -> Logs
+  - Cloud Logging -> Logs Explorer (filter `resource.type="cloud_run_revision"`)
 
 ## Deployed URL shape
 

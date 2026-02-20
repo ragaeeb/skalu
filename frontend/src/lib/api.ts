@@ -10,9 +10,18 @@ type StreamHandlers = {
   onError: (event: Extract<AnalyzeStreamEvent, { type: "error" }>) => void
 }
 
-const buildAnalyzeForm = (file: File, options: AnalyzeRequestOptions): FormData => {
+type AnalyzeInput = {
+  file: File | null
+  file_url: string | null
+}
+
+const buildAnalyzeForm = (input: AnalyzeInput, options: AnalyzeRequestOptions): FormData => {
   const form = new FormData()
-  form.append("file", file)
+  if (input.file_url && input.file_url.trim().length > 0) {
+    form.append("file_url", input.file_url.trim())
+  } else if (input.file) {
+    form.append("file", input.file)
+  }
   form.append("include_empty_pages", options.include_empty_pages ? "true" : "false")
   form.append("include_visualizations", options.include_visualizations ? "true" : "false")
   form.append("stream", options.stream ? "true" : "false")
@@ -35,8 +44,8 @@ export const fetchVersion = async (): Promise<VersionResponse> => {
   return response.json()
 }
 
-export const analyzeFile = async (file: File, options: Omit<AnalyzeRequestOptions, "stream">): Promise<AnalyzePayload> => {
-  const form = buildAnalyzeForm(file, { ...options, stream: false })
+export const analyzeFile = async (input: AnalyzeInput, options: Omit<AnalyzeRequestOptions, "stream">): Promise<AnalyzePayload> => {
+  const form = buildAnalyzeForm(input, { ...options, stream: false })
   const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: form })
   if (!response.ok) {
     const err = await response.json().catch(() => ({}))
@@ -46,11 +55,11 @@ export const analyzeFile = async (file: File, options: Omit<AnalyzeRequestOption
 }
 
 export const analyzeFileStream = async (
-  file: File,
+  input: AnalyzeInput,
   options: Omit<AnalyzeRequestOptions, "stream">,
   handlers: StreamHandlers,
 ): Promise<void> => {
-  const form = buildAnalyzeForm(file, { ...options, stream: true })
+  const form = buildAnalyzeForm(input, { ...options, stream: true })
   const response = await fetch(`${API_BASE}/analyze`, { method: "POST", body: form })
 
   if (!response.ok) {
