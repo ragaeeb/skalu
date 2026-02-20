@@ -190,3 +190,94 @@ def test_analyze_invalid_file_type_returns_bad_input(client):
 
     assert response.status_code == 400
     assert payload["code"] == "bad_input"
+
+
+def test_analyze_remote_pdf_url_non_stream_success(client, monkeypatch):
+    expected = {
+        "result_json": "{\"pages\":[]}",
+        "result_data": {"pages": []},
+        "summary": {"type": "pdf", "pages": []},
+        "processed_filename": "remote.pdf",
+        "detection_params": {
+            "min_line_width_ratio": 0.2,
+            "max_line_height": 10,
+            "min_rect_area_ratio": 0.001,
+            "max_rect_area_ratio": 0.5,
+        },
+        "visualizations": [],
+        "debug_groups": [],
+    }
+
+    def fake_fetch_remote_pdf(url, workspace, max_bytes):
+        assert url == "https://example.com/input.pdf"
+        assert max_bytes > 0
+        return "remote.pdf"
+
+    def fake_run_analysis_with_timeout(workdir, filename, options, timeout_seconds):
+        assert filename == "remote.pdf"
+        assert options.include_empty_pages is True
+        return expected
+
+    monkeypatch.setattr("backend.routes.analyze.fetch_remote_pdf", fake_fetch_remote_pdf)
+    monkeypatch.setattr("backend.routes.analyze.run_analysis_with_timeout", fake_run_analysis_with_timeout)
+
+    response = client.post(
+        "/analyze",
+        data={
+            "file_url": "https://example.com/input.pdf",
+            "include_empty_pages": "true",
+            "include_visualizations": "false",
+            "stream": "false",
+            "min_line_width_ratio": "0.2",
+            "max_line_height": "10",
+            "min_rect_area_ratio": "0.001",
+            "max_rect_area_ratio": "0.5",
+        },
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["processed_filename"] == "remote.pdf"
+
+
+def test_analyze_remote_pdf_url_rejects_non_public_host(client):
+    response = client.post(
+        "/analyze",
+        data={
+            "file_url": "http://localhost/file.pdf",
+        },
+        content_type="multipart/form-data",
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 400
+    assert payload["code"] == "bad_input"
+
+
+def test_analyze_remote_pdf_url_rejects_invalid_scheme(client):
+    response = client.post(
+        "/analyze",
+        data={
+            "file_url": "ftp://example.com/file.pdf",
+        },
+        content_type="multipart/form-data",
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 400
+    assert payload["code"] == "bad_input"
+
+
+def test_analyze_rejects_both_file_and_file_url(client):
+    response = client.post(
+        "/analyze",
+        data={
+            **_multipart(),
+            "file_url": "https://example.com/file.pdf",
+        },
+        content_type="multipart/form-data",
+    )
+    payload = response.get_json()
+
+    assert response.status_code == 400
+    assert payload["code"] == "bad_input"

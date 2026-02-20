@@ -102,7 +102,8 @@ bunx playwright test
 - Version metadata: `GET /version`
 - Analyze file: `POST /analyze` (multipart)
   - Fields:
-    - `file`
+    - `file` (mutually exclusive with `file_url`)
+    - `file_url` (mutually exclusive with `file`; public `http(s)` PDF URL)
     - `include_empty_pages` (`true|false`)
     - `include_visualizations` (`true|false`)
     - `stream` (`true|false`)
@@ -153,7 +154,8 @@ Purpose:
 Request:
 - Content type: `multipart/form-data`
 - Fields:
-  - `file` (required): PDF or image (`pdf,png,jpg,jpeg,bmp,tiff,webp`)
+  - `file` (optional): uploaded PDF or image (`pdf,png,jpg,jpeg,bmp,tiff,webp`)
+  - `file_url` (optional): public PDF URL (only `http`/`https`)
   - `include_empty_pages` (optional, default `true`)
   - `include_visualizations` (optional, default `false`)
   - `stream` (optional, default `false`)
@@ -180,14 +182,18 @@ Success (`stream=true`, `200`):
 
 Common errors:
 - `400`: missing file, unsupported extension, invalid params
+- `400`: invalid `file_url` (non-public host, bad scheme, non-PDF response, too large)
 - `408`: analysis timeout
 - `500`: processing/storage failure
 
-### Input limitations
+### `file_url` security checks
 
-- The API currently accepts uploaded files only (`multipart/form-data` `file` field).
-- Public URL ingestion (for example passing a PDF URL directly) is **not supported** today.
-- If you have a public PDF URL, download it in your client/app first, then upload that file to `POST /analyze`.
+When `file_url` is provided, the API enforces sanity checks before processing:
+- URL must be `http://` or `https://`.
+- Host must resolve to public IPs only (blocks loopback/private/link-local/reserved ranges).
+- `localhost` and metadata hosts are blocked.
+- Response must look like a PDF (`Content-Type` check) and download size is capped by server `MAX_CONTENT_LENGTH`.
+- `file` and `file_url` cannot be sent together.
 
 ## Deploy setup (GCP)
 
@@ -236,6 +242,29 @@ const analyzeFile = async (baseUrl: string, file: File) => {
   form.append("max_line_height", "10");
   form.append("min_rect_area_ratio", "0.001");
   form.append("max_rect_area_ratio", "0.5");
+
+  const res = await fetch(`${baseUrl}/analyze`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Analyze failed: ${res.status} ${await res.text()}`);
+  }
+
+  return await res.json();
+};
+```
+
+### URL-based request (`file_url`)
+
+```ts
+const analyzePdfUrl = async (baseUrl: string, pdfUrl: string) => {
+  const form = new FormData();
+  form.append("file_url", pdfUrl);
+  form.append("include_empty_pages", "true");
+  form.append("include_visualizations", "false");
+  form.append("stream", "false");
 
   const res = await fetch(`${baseUrl}/analyze`, {
     method: "POST",
