@@ -199,7 +199,8 @@ flowchart LR
 ## 13) Setup Checklist (End-to-End)
 
 1. Run bootstrap:
-   - `scripts/bootstrap_cloud.sh --project-id ... --github-owner ... --github-repo ... --allowed-origins ... --run-terraform-apply`
+   - `scripts/bootstrap_cloud.sh --region us-central1 --allowed-origins "*" --run-terraform-apply`
+   - optional overrides: `--project-id`, `--github-owner`, `--github-repo`
 2. In Cloud Console, connect GitHub repo to Cloud Build App (one-time).
 3. Push to `main`.
 4. Verify:

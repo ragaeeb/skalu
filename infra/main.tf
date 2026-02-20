@@ -28,6 +28,7 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [google_project_service.apis]
   name       = "skalu-api"
   location   = var.region
+  deletion_protection = false
 
   template {
     scaling {
@@ -57,10 +58,6 @@ resource "google_cloud_run_v2_service" "api" {
         value = var.allowed_origins
       }
       env {
-        name  = "PORT"
-        value = "8080"
-      }
-      env {
         name  = "MAX_CONTENT_LENGTH"
         value = "10485760"
       }
@@ -71,23 +68,6 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "STREAM_HEARTBEAT_SECONDS"
         value = tostring(var.stream_heartbeat_seconds)
-      }
-
-      startup_probe {
-        http_get {
-          path = "/health"
-        }
-        initial_delay_seconds = 5
-        period_seconds        = 5
-        failure_threshold     = 10
-      }
-
-      liveness_probe {
-        http_get {
-          path = "/health"
-        }
-        period_seconds    = 30
-        failure_threshold = 3
       }
     }
 

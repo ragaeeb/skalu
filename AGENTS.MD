@@ -4,8 +4,8 @@
 
 - Backend: Flask API (`app.py`) on Python 3.14.
 - Frontend: Vite + React + TypeScript in `frontend/` managed with Bun.
-- Infra: Terraform in `infra/` for Cloud Run, Artifact Registry, Firebase Hosting, and WIF.
-- CI/CD: GitHub Actions in `.github/workflows/`.
+- Infra: Terraform in `infra/` for Cloud Run, Artifact Registry, and Cloud Build trigger/IAM.
+- CI/CD: Cloud Build GitHub trigger (configured by Terraform) for deploys on `main`.
 
 ## Code and Style
 
@@ -40,7 +40,9 @@
 ## Deployment Notes
 
 - API endpoint includes health check at `GET /health`.
-- Results endpoint supports visualization payloads only with `?viz=true`.
-- API job state is in-memory; Terraform keeps Cloud Run min instances at 1.
+- API exposes `GET /version` for backend/frontend build metadata.
+- `POST /analyze` is single-shot and stateless, with optional NDJSON streaming progress.
+- Frontend is served from the same Cloud Run service/container as the backend.
+- Cloud Run min instances are configured to `0`.
 - Configure Terraform backend bucket via init flag:
   - `terraform init -backend-config="bucket=skalu-tfstate-YOUR_PROJECT_ID"`

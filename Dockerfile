@@ -39,4 +39,4 @@ ENV PORT=8080 \
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "gunicorn --workers 1 --threads 8 --timeout 3600 --bind 0.0.0.0:${PORT} app:app"]
+CMD ["python", "app.py"]
