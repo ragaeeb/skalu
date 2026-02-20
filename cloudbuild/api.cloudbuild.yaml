@@ -1,0 +1,69 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - id: test-frontend
+    name: oven/bun:1.3.9
+    entrypoint: sh
+    args:
+      - -ceu
+      - |
+        cd frontend
+        bun install --frozen-lockfile
+        bun run test
+
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_IMAGE_REPO}:${SHORT_SHA}
+      - -t
+      - ${_IMAGE_REPO}:latest
+      - .
+
+  - id: push-sha
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_IMAGE_REPO}:${SHORT_SHA}
+
+  - id: push-latest
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_IMAGE_REPO}:latest
+
+  - id: deploy-cloud-run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        BACKEND_VERSION="$(python3 - <<'PY'
+        import tomllib
+        with open("pyproject.toml", "rb") as fh:
+            data = tomllib.load(fh)
+        print(data["project"]["version"])
+        PY
+        )"
+
+        BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+        gcloud run deploy "${_SERVICE}" \
+          --project "${PROJECT_ID}" \
+          --region "${_REGION}" \
+          --image "${_IMAGE_REPO}:${SHORT_SHA}" \
+          --command "/usr/local/bin/python" \
+          --args "/app/app.py" \
+          --allow-unauthenticated \
+          --concurrency 1 \
+          --min-instances 0 \
+          --max-instances 2 \
+          --memory 1Gi \
+          --timeout 3600 \
+          --set-env-vars "ALLOWED_ORIGINS=${_ALLOWED_ORIGINS},MAX_CONTENT_LENGTH=10485760,ANALYZE_TIMEOUT_SECONDS=${_ANALYZE_TIMEOUT_SECONDS},STREAM_HEARTBEAT_SECONDS=${_STREAM_HEARTBEAT_SECONDS},APP_VERSION=${BACKEND_VERSION},GIT_SHA=${COMMIT_SHA},BUILD_TIME=${BUILD_TIME}"
+
+        SERVICE_URL="$(gcloud run services describe "${_SERVICE}" --project "${PROJECT_ID}" --region "${_REGION}" --format='value(status.url)')"
+        curl -fsS "${SERVICE_URL}/health" >/dev/null
+        curl -fsS "${SERVICE_URL}/version" >/dev/null

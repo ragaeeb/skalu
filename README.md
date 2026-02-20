@@ -1,328 +1,429 @@
 # skalu
 
-<div align="center">
-  <img src="https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d.svg" />
-  <a href="https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb" target="_blank"><img src="https://colab.research.google.com/assets/colab-badge.svg" /></a>
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" />
-  <img src="https://img.shields.io/badge/podman-v5.5.2-purple.svg" alt="Podman: v5.5.2" />
-</div>
+Skalu extracts horizontal lines and rectangles from images and PDFs, with a Flask API backend and a React frontend.
 
-## Overview
+## Architecture
 
-Skalu is a Python tool for detecting horizontal lines and rectangles in images and PDFs. It's particularly useful for document analysis, form processing, and table structure extraction. The tool uses computer vision techniques to identify structural elements and outputs structured data about their positions.
+- Backend API: Flask (`app.py`) deployed to Google Cloud Run
+- Frontend: Vite + React + TypeScript in `frontend/`, built into the Cloud Run container
+- Infrastructure: Terraform in `infra/`
+- CI: GitHub Actions (tests + releases)
+- CD: Cloud Build GitHub triggers (direct deploy on push)
+- Frontend package manager and scripts: Bun
 
-### Key Features
+## Prerequisites
 
-- **Structure Detection**: Identify horizontal lines and rectangles (including squares)
-- **Single Image Processing**: Detect structures in individual images
-- **PDF Processing**: Extract structures from PDF documents page by page
-- **Batch Processing**: Process entire folders of images at once
-- **JSON Output**: Get structured data about detected elements
-- **Smart Filtering**: Only include pages/images with detected structures
-- **Visual Debugging**: Generate annotated images showing detected structures
-- **Configurable Parameters**: Adjust detection sensitivity for different structure types
-- **Versioned CLI**: Check the currently installed release with `python skalu.py --version` (v1.0.1)
-- **Docker Support**: Run anywhere with containerization
-- **Google Colab Integration**: Process files in the cloud
+- Python 3.14
+- Bun 1.3.9+
+- `uv`
+- gcloud CLI
+- Terraform 1.9+
 
-## Web Demo
+## Local development
 
-You can explore Skalu through a lightweight Flask web demo that accepts PDF and image uploads and shows the detected rectangles and horizontal lines.
-
-- **Real-time feedback** – uploads run asynchronously so the page displays live progress as each page is analyzed.
-- **Inline insights** – once finished, the app renders summaries, visualizations, debug frames, and a downloadable JSON payload without refreshing the page.
-
-### Run the demo locally
+### One-command startup
 
 ```bash
-uv venv --python 3.13
+./dev_up.sh
+```
+
+This launches:
+- Backend on `http://localhost:8080`
+- Frontend on `http://localhost:5173`
+
+The script traps kill signals and shuts both processes down together.
+
+### Backend only
+
+```bash
+uv venv --python 3.14 .venv
 source .venv/bin/activate
-uv pip install -r requirements.txt
-FLASK_APP=app.py flask run
+uv pip install -r requirements_dev.txt
+python app.py
 ```
 
-Then open <http://127.0.0.1:5000> in your browser, upload a document, and review the JSON output directly in the page. The demo now renders annotated visualizations, surfaces the intermediate debug frames when available, and lets you download the structured results as a JSON file with one click.
-
-### Deploy to Render
-
-1. Push this repository to your own GitHub account.
-2. Create a new **Web Service** on [Render](https://render.com/) and connect it to your fork.
-3. When prompted, enable the **Auto-detect settings from render.yaml** option.
-4. Deploy. Render will run `uv pip install --system -r requirements.txt` and start the server with `gunicorn app:app`.
-
-The default configuration limits uploads to 25&nbsp;MB to keep the demo responsive. Adjust the `MAX_CONTENT_LENGTH` environment variable in `render.yaml` if you need to allow larger files. The asynchronous upload workflow keeps requests short so long-running PDF analyses do not trip Render's worker timeout.
-
-### Deploy to Streamlit Cloud
-
-You can ship the same experience to [Streamlit Community Cloud](https://streamlit.io/cloud) with the dedicated `streamlit_app.py` entry point.
-
-1. Add this repository to Streamlit Cloud and choose **streamlit_app.py** as the app file.
-2. Make sure the environment installs the `requirements.txt` dependencies. Streamlit Cloud supports [`uv`](https://docs.streamlit.io/streamlit-community-cloud/deploy-your-app/app-dependencies) so the recommended install command is `uv pip install --system -r requirements.txt`.
-3. Once deployed, the UI mirrors the Render demo: upload a PDF or image, watch live progress, review inline visualizations/debug frames, and download the JSON results.
-
-To try it locally, run:
+### Frontend only
 
 ```bash
-streamlit run streamlit_app.py
+cd frontend
+bun install
+bun run dev
 ```
 
-Streamlit caches no intermediate files, so each run stores artifacts in a temporary workspace, streams results to the browser, and cleans up after completion.
+Frontend proxies API routes to `http://localhost:8080` in dev mode.
 
-## Installation
+### Environment
 
-### Local Installation
-
-1. Clone this repository:
-
-   ```bash
-   git clone https://github.com/yourusername/skalu.git
-   cd skalu
-   ```
-
-2. Create a local environment and install dependencies with [`uv`](https://github.com/astral-sh/uv):
-   ```bash
-   uv venv --python 3.13
-   source .venv/bin/activate
-   uv pip install -r requirements_dev.txt
-   ```
-   The base `requirements.txt` lists the runtime packages while
-   `requirements_dev.txt` adds the testing toolchain used by CI.
-
-### Docker Installation
+Copy `.env.example` and adjust values as needed:
 
 ```bash
-# Build the Docker image
-docker build -t skalu .
-
-# Start the web demo on http://localhost:10000
-docker run -p 10000:10000 skalu
-
-# Run the batch processor against a mounted volume
-docker run -v /path/to/your/images:/data skalu all
-
-# Process a single file inside the container
-docker run -v /path/to/your/file.pdf:/data/file.pdf skalu /data/file.pdf
+cp .env.example .env
 ```
 
-## Usage
-
-### Command Line Interface
-
-```bash
-# Check the installed version
-python skalu.py --version
-
-# Process a single image
-python skalu.py path/to/image.jpg
-
-# Process a PDF document
-python skalu.py path/to/document.pdf
-
-# Process a folder of images
-python skalu.py path/to/folder/
-
-# Specify custom output JSON path
-python skalu.py path/to/image.jpg --output results.json
-
-# Process PDF with custom output filename
-python skalu.py document.pdf -o pdf_results.json
-
-# Adjust detection parameters for lines
-python skalu.py path/to/image.jpg --min-width-ratio 0.3 --max-height 15
-
-# Adjust detection parameters for rectangles
-python skalu.py path/to/image.jpg --min-rect-area 0.002 --max-rect-area 0.4
-
-# Generate debug images and visualizations
-python skalu.py document.pdf --debug-dir debug_output --save-viz
-```
-
-### Parameters
-
-- **Line Detection**:
-
-  - `--min-width-ratio`: Minimum width ratio of detected lines compared to image width (default: 0.2)
-  - `--max-height`: Maximum height in pixels for a detected line (default: 10)
-
-- **Rectangle Detection**:
-
-  - `--min-rect-area`: Minimum rectangle area as a fraction of image area (default: 0.001)
-  - `--max-rect-area`: Maximum rectangle area as a fraction of image area (default: 0.5)
-
-- **General**:
-  - `--output`, `-o`: Custom output path for results JSON
-  - `--debug-dir`: Directory for storing intermediate processing images
-  - `--save-viz`: Save visualization of detected structures
+Main backend variables:
+- `PORT`
+- `ALLOWED_ORIGINS`
+- `MAX_CONTENT_LENGTH`
+- `ANALYZE_TIMEOUT_SECONDS`
+- `STREAM_HEARTBEAT_SECONDS`
+- `APP_VERSION`
+- `GIT_SHA`
+- `BUILD_TIME`
+- `LOG_LEVEL`
 
 ## Testing
 
-Run the full suite—including the CLI integration test that validates PDF
-processing end to end—after installing `requirements_dev.txt`:
+### Backend tests
 
 ```bash
-uv run pytest -v
+source .venv/bin/activate
+pytest -q
 ```
 
-To generate coverage reports:
+### Frontend unit + integration (`bun:test`)
 
 ```bash
-uv run pytest --cov=skalu --cov-report=term --cov-report=html
+cd frontend
+bun run test
 ```
 
-The integration test exercises `python skalu.py tests/test.pdf` and compares the
-output JSON to `tests/expected_test_results.json`, ensuring the public CLI stays
-aligned with the reference data set.
+### Frontend E2E (Playwright)
 
-## Output Format
+```bash
+cd frontend
+bunx playwright install chromium
+bunx playwright test
+```
 
-### Image Processing
+## API highlights
 
-Skalu generates a JSON file with detailed information about the detected structures:
+- Health check: `GET /health`
+- Version metadata: `GET /version`
+- Analyze file: `POST /analyze` (multipart)
+  - Fields:
+    - `file` (mutually exclusive with `file_url`)
+    - `file_url` (mutually exclusive with `file`; public `http(s)` PDF URL)
+    - `include_empty_pages` (`true|false`)
+    - `include_visualizations` (`true|false`)
+    - `stream` (`true|false`)
+    - `min_line_width_ratio`
+    - `max_line_height`
+    - `min_rect_area_ratio`
+    - `max_rect_area_ratio`
+  - `stream=false`: returns JSON payload
+  - `stream=true`: returns `application/x-ndjson` events (`accepted`, `progress`, `heartbeat`, `result`, `error`)
+
+## Public API reference
+
+Base URL:
+- `https://skalu-api-<service-hash>-uc.a.run.app`
+
+### `GET /health`
+
+Purpose:
+- Liveness/readiness check.
+
+Response `200`:
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /version`
+
+Purpose:
+- Returns backend version/build metadata.
+
+Response `200`:
 
 ```json
 {
-  "result": {
-    "example.jpg": {
-      "dpi": {
-        "width": 1240,
-        "height": 1754,
-        "x": 300,
-        "y": 300
-      },
-      "horizontal_lines": [
-        {
-          "x": 120,
-          "y": 350,
-          "width": 1000,
-          "height": 2
-        },
-        {
-          "x": 120,
-          "y": 700,
-          "width": 1000,
-          "height": 2
-        }
-      ],
-      "rectangles": [
-        {
-          "x": 200,
-          "y": 150,
-          "width": 400,
-          "height": 300
-        },
-        {
-          "x": 650,
-          "y": 450,
-          "width": 250,
-          "height": 250
-        }
-      ]
-    }
-  },
-  "detection_params": {
-    "min_line_width_ratio": 0.2,
-    "max_line_height": 10,
-    "min_rect_area_ratio": 0.001,
-    "max_rect_area_ratio": 0.5
-  }
+  "backend_version": "0.2.0",
+  "frontend_version": null,
+  "git_sha": "dev",
+  "build_time": "unknown"
 }
 ```
 
-### PDF Processing
+### `POST /analyze`
 
-For PDF files, the output format includes page-by-page results:
+Purpose:
+- Analyze one uploaded PDF/image in a single request.
 
-```json
-{
-  "dpi": {
-    "x": 200,
-    "y": 200
-  },
-  "pages": [
-    {
-      "page": 1,
-      "width": 1654,
-      "height": 2339,
-      "horizontal_lines": [
-        {
-          "x": 150,
-          "y": 400,
-          "width": 1200,
-          "height": 3
-        }
-      ],
-      "rectangles": [
-        {
-          "x": 200,
-          "y": 150,
-          "width": 400,
-          "height": 300
-        }
-      ]
-    },
-    {
-      "page": 3,
-      "width": 1654,
-      "height": 2339,
-      "horizontal_lines": [
-        {
-          "x": 100,
-          "y": 800,
-          "width": 1400,
-          "height": 2
-        }
-      ]
-    }
-  ],
-  "detection_params": {
-    "min_line_width_ratio": 0.2,
-    "max_line_height": 10,
-    "min_rect_area_ratio": 0.001,
-    "max_rect_area_ratio": 0.5
-  }
-}
+Request:
+- Content type: `multipart/form-data`
+- Fields:
+  - `file` (optional): uploaded PDF or image (`pdf,png,jpg,jpeg,bmp,tiff,webp`)
+  - `file_url` (optional): public PDF URL (only `http`/`https`)
+  - `include_empty_pages` (optional, default `true`)
+  - `include_visualizations` (optional, default `false`)
+  - `stream` (optional, default `false`)
+  - `min_line_width_ratio` (optional, default `0.2`)
+  - `max_line_height` (optional, default `10`)
+  - `min_rect_area_ratio` (optional, default `0.001`)
+  - `max_rect_area_ratio` (optional, default `0.5`)
+
+Success (`stream=false`, `200`):
+- JSON object containing:
+  - `result_data`
+  - `summary`
+  - `detection_params`
+  - optional `visualizations`, `debug_groups`
+
+Success (`stream=true`, `200`):
+- `Content-Type: application/x-ndjson`
+- Event types:
+  - `accepted`
+  - `progress`
+  - `heartbeat`
+  - `result` (terminal success)
+  - `error` (terminal failure)
+
+Common errors:
+- `400`: missing file, unsupported extension, invalid params
+- `400`: invalid `file_url` (non-public host, bad scheme, non-PDF response, too large)
+- `408`: analysis timeout
+- `500`: processing/storage failure
+
+### `file_url` security checks
+
+When `file_url` is provided, the API enforces sanity checks before processing:
+- URL must be `http://` or `https://`.
+- Host must resolve to public IPs only (blocks loopback/private/link-local/reserved ranges).
+- `localhost` and metadata hosts are blocked.
+- Response must look like a PDF (`Content-Type` check) and download size is capped by server `MAX_CONTENT_LENGTH`.
+- `file` and `file_url` cannot be sent together.
+
+## Deploy setup (GCP)
+
+1. Authenticate and select project:
+   - `gcloud auth login`
+   - `gcloud auth application-default login`
+   - `gcloud config set project YOUR_PROJECT_ID`
+   - `gcloud auth application-default set-quota-project YOUR_PROJECT_ID`
+2. Link billing to the project.
+3. Run bootstrap:
+   - `scripts/bootstrap_cloud.sh --region us-central1 --allowed-origins "*" --run-terraform-apply`
+4. Complete one-time Cloud Build GitHub connection in console:
+   - `https://console.cloud.google.com/cloud-build/triggers;region=global/connect?project=YOUR_PROJECT_ID`
+5. Re-run:
+   - `terraform -chdir=infra apply`
+6. Verify:
+   - `API_URL="$(terraform -chdir=infra output -raw api_url)"`
+   - `curl -fsS "${API_URL}/health"`
+   - `curl -fsS "${API_URL}/version"`
+7. Push to `main` to trigger deploys via Cloud Build.
+   - Note: trigger runs when changed files match configured deploy paths (`backend/**`, `frontend/**`, `Dockerfile`, etc.).
+
+Detailed setup is in [`cloud_setup.md`](cloud_setup.md).
+
+## Monitoring and logs
+
+### Local development logs
+
+- Combined local logs (backend + frontend):
+
+```bash
+./dev_up.sh
 ```
 
-**Notes**: 
-- The output only includes structure types (`horizontal_lines` or `rectangles`) that are actually detected.
-- For PDFs, only pages containing at least one horizontal line OR rectangle are included in the results.
-- PDF pages are rendered at 200 DPI for high-quality structure detection.
+- Backend only logs:
 
-## Google Colab
+```bash
+source .venv/bin/activate
+python app.py
+```
 
-You can use Skalu directly in Google Colab without any local installation:
+- Frontend only logs:
 
-1. Open the [Skalu Colab Notebook](https://colab.research.google.com/github/ragaeeb/skalu/blob/main/skalu.ipynb)
-2. Upload your images or PDFs using the file browser
-3. Run the notebook to process all files
-4. Download the results
+```bash
+cd frontend
+bun run dev
+```
 
-## Use Cases
+### Cloud Build deploy logs
 
-- Extract table structures from scanned documents and PDFs
-- Process form fields by identifying separator lines and bounding boxes
-- Detect paragraph/section divisions in documents
-- Identify form field boxes and checkboxes in PDF forms
-- Prepare images for OCR by understanding document layout
-- Detect rectangular regions of interest in diagrams and charts
-- Batch process multi-page PDF documents for structure analysis
-- Filter PDF pages based on structural content
+- List recent builds:
 
-## Supported Formats
+```bash
+gcloud builds list --project YOUR_PROJECT_ID --region us-central1 --limit=20
+```
 
-- **Images**: JPG, JPEG, PNG, BMP, TIFF, WebP
-- **Documents**: PDF (multi-page support)
+- Stream a build:
 
-## License
+```bash
+gcloud builds log --project YOUR_PROJECT_ID --region us-central1 --stream BUILD_ID
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- Console:
+  - Cloud Build -> History
 
-## Contributing
+### Cloud Run service/revision logs (API + frontend container)
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- Tail service logs:
 
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+```bash
+gcloud run services logs tail skalu-api --project YOUR_PROJECT_ID --region us-central1
+```
+
+- Read recent logs:
+
+```bash
+gcloud run services logs read skalu-api --project YOUR_PROJECT_ID --region us-central1 --limit=200
+```
+
+- Read logs for one specific revision:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="skalu-api" AND resource.labels.revision_name="REVISION_NAME"' \
+  --project YOUR_PROJECT_ID \
+  --limit=200
+```
+
+- Console:
+  - Cloud Run -> `skalu-api` -> Logs
+  - Cloud Logging -> Logs Explorer (filter `resource.type="cloud_run_revision"`)
+
+## Deployed URL shape
+
+- Terraform output `api_url` is your base URL.
+- Example format (Cloud Run):
+  - `https://skalu-api-<service-hash>-uc.a.run.app`
+- Example endpoints:
+  - `https://skalu-api-<service-hash>-uc.a.run.app/health`
+  - `https://skalu-api-<service-hash>-uc.a.run.app/version`
+  - `https://skalu-api-<service-hash>-uc.a.run.app/analyze`
+
+## Calling the API from another app (TypeScript)
+
+### Non-stream request (`stream=false`)
+
+```ts
+const analyzeFile = async (baseUrl: string, file: File) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("include_empty_pages", "true");
+  form.append("include_visualizations", "false");
+  form.append("stream", "false");
+  form.append("min_line_width_ratio", "0.2");
+  form.append("max_line_height", "10");
+  form.append("min_rect_area_ratio", "0.001");
+  form.append("max_rect_area_ratio", "0.5");
+
+  const res = await fetch(`${baseUrl}/analyze`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Analyze failed: ${res.status} ${await res.text()}`);
+  }
+
+  return await res.json();
+};
+```
+
+### URL-based request (`file_url`)
+
+```ts
+const analyzePdfUrl = async (baseUrl: string, pdfUrl: string) => {
+  const form = new FormData();
+  form.append("file_url", pdfUrl);
+  form.append("include_empty_pages", "true");
+  form.append("include_visualizations", "false");
+  form.append("stream", "false");
+
+  const res = await fetch(`${baseUrl}/analyze`, {
+    method: "POST",
+    body: form,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Analyze failed: ${res.status} ${await res.text()}`);
+  }
+
+  return await res.json();
+};
+```
+
+### Streaming request (`stream=true`, NDJSON)
+
+```ts
+type StreamEvent =
+  | { type: "accepted"; filename: string; started_at: string }
+  | { type: "progress"; processed: number; total: number; message: string }
+  | { type: "heartbeat"; ts: string }
+  | { type: "result"; payload: unknown }
+  | { type: "error"; code: string; message: string };
+
+const analyzeFileStream = async (
+  baseUrl: string,
+  file: File,
+  onEvent: (event: StreamEvent) => void,
+) => {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("include_empty_pages", "true");
+  form.append("include_visualizations", "false");
+  form.append("stream", "true");
+
+  const res = await fetch(`${baseUrl}/analyze`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok || !res.body) {
+    throw new Error(`Stream request failed: ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let newlineIndex = buffer.indexOf("\n");
+    while (newlineIndex !== -1) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      if (line.length > 0) {
+        onEvent(JSON.parse(line) as StreamEvent);
+      }
+      newlineIndex = buffer.indexOf("\n");
+    }
+  }
+};
+```
+
+## External access and CORS
+
+- Yes, another app can call this API from outside your project.
+- Server-to-server calls are not blocked by CORS.
+- Browser calls are subject to CORS:
+  - `ALLOWED_ORIGINS="*"` allows any browser origin.
+  - If you lock down `ALLOWED_ORIGINS`, only listed origins can call from browsers.
+
+## CI workflows
+
+- `.github/workflows/test.yml`: Python tests (uv + Python 3.14)
+- `.github/workflows/release.yml`: Release Please (manifest mode for backend + frontend)
+
+## Cloud Build pipelines
+
+- `cloudbuild/api.cloudbuild.yaml`: frontend tests + full image build (frontend + backend) + Cloud Run deploy + smoke checks
+
+## Versioning
+
+Release Please reads conventional commits on `main` and opens release PRs:
+
+- `fix:` -> patch bump
+- `feat:` -> minor bump
+- `feat!:` or `BREAKING CHANGE:` -> major bump
+
+Version sources:
+
+- Backend: `pyproject.toml` (`project.version`)
+- Frontend: `frontend/package.json` (`version`)

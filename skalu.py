@@ -234,9 +234,15 @@ def process_pdf(
     debug_dir=None,
     save_visualization=False,
     progress_callback=None,
+    include_empty_pages=False,
 ):
     """
     Processes a PDF file to detect horizontal lines and rectangles on each page.
+    
+    Args:
+        include_empty_pages: If True, include all pages in results even if no 
+                            structures were detected. Visualization will show original 
+                            page image for empty pages.
     """
     if params is None:
         params = {}
@@ -345,9 +351,61 @@ def process_pdf(
         img_data = pix.tobytes("png")
         nparr = np.frombuffer(img_data, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
+
+        # Fallback path: build image from raw pixmap samples when PNG decode fails.
         if img is None:
-            print(f"Warning: Unable to process page {page_num + 1}")
+            try:
+                channels = int(getattr(pix, "n", 0) or 0)
+                samples = np.frombuffer(pix.samples, dtype=np.uint8)
+                expected_size = actual_width * actual_height * channels
+                if channels in (1, 3, 4) and samples.size == expected_size:
+                    raw = samples.reshape(actual_height, actual_width, channels)
+                    if channels == 1:
+                        img = cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR)
+                    elif channels == 3:
+                        img = cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
+                    else:
+                        img = cv2.cvtColor(raw, cv2.COLOR_RGBA2BGR)
+            except Exception as e:
+                print(f"Warning: Raw pixmap conversion failed for page {page_num + 1}: {e}")
+
+        if img is None:
+            print(f"Warning: Unable to decode rendered page {page_num + 1}")
+
+            if include_empty_pages:
+                pages.append(
+                    {
+                        "page": page_num + 1,
+                        "width": actual_width,
+                        "height": actual_height,
+                        "processing_warning": "Unable to decode rendered page image",
+                    }
+                )
+
+            if save_visualization:
+                fallback_img = np.full((actual_height, actual_width, 3), 255, dtype=np.uint8)
+                cv2.putText(
+                    fallback_img,
+                    "Unable to decode rendered page",
+                    (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    (0, 0, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+                viz_path = os.path.join(
+                    os.path.dirname(output_json_path),
+                    f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{page_num + 1}_detected.jpg",
+                )
+                cv2.imwrite(viz_path, fallback_img)
+
+            pix = None
+            if progress_callback:
+                try:
+                    progress_callback(page_num + 1, total_pages)
+                except Exception:
+                    pass
             continue
 
         # Calculate DPI from first page only
@@ -371,26 +429,31 @@ def process_pdf(
         lines = detect_horizontal_lines(img, min_line_ratio, max_line_h, page_debug_dir)
         rectangles = detect_rectangles(img, min_rect_area, max_rect_area, page_debug_dir)
         
-        # Only process pages that have at least 1 horizontal line OR at least 1 rectangle
-        if lines or rectangles:
+        # Include every page when requested; otherwise only include pages with detections.
+        if include_empty_pages or lines or rectangles:
             # Create page result using actual rendered dimensions
             page_result = {
                 "page": page_num + 1,
                 "width": actual_width,
                 "height": actual_height
             }
-            
+
             # Add structures if they exist
             if lines:
                 page_result["horizontal_lines"] = lines
             if rectangles:
                 page_result["rectangles"] = rectangles
-                
+
             pages.append(page_result)
 
-        # Save visualization if requested
+        # Save visualization if requested - always save for each page
         if save_visualization:
-            debug_img = draw_detections(img, lines, rectangles)
+            # If no structures detected, save original image; otherwise save with detections
+            if lines or rectangles:
+                debug_img = draw_detections(img, lines, rectangles)
+            else:
+                # Save original page image
+                debug_img = img
             viz_path = os.path.join(os.path.dirname(output_json_path), 
                                    f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{page_num + 1}_detected.jpg")
             cv2.imwrite(viz_path, debug_img)

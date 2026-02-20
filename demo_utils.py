@@ -13,6 +13,7 @@ DEFAULT_PARAMS = {
     "max_line_height": 10,
     "min_rect_area_ratio": 0.001,
     "max_rect_area_ratio": 0.5,
+    "include_empty_pages": True,  # Include pages with no detected structures in results
 }
 
 
@@ -60,25 +61,23 @@ def build_summary(data: dict) -> Optional[dict]:
     return None
 
 
-def encode_image_as_data_url(path: str) -> Optional[str]:
-    """Load an image and return it as a data URL for inline display."""
+def encode_image_as_data_url(path: str, max_width: int = 900) -> Optional[str]:
+    """Load an image, resize to max_width, and return as a JPEG data URL."""
     try:
-        with open(path, "rb") as file:
-            encoded = base64.b64encode(file.read()).decode("ascii")
+        from PIL import Image as PILImage
+        import io as _io
+
+        with PILImage.open(path) as img:
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img = img.resize((max_width, int(img.height * ratio)), PILImage.LANCZOS)
+            buf = _io.BytesIO()
+            img.save(buf, format="JPEG", quality=65, optimize=True)
+            encoded = base64.b64encode(buf.getvalue()).decode("ascii")
     except OSError:
         return None
 
-    ext = os.path.splitext(path)[1].lower()
-    if ext in {".jpg", ".jpeg"}:
-        mime = "image/jpeg"
-    elif ext == ".png":
-        mime = "image/png"
-    elif ext == ".webp":
-        mime = "image/webp"
-    else:
-        mime = "image/octet-stream"
-
-    return f"data:{mime};base64,{encoded}"
+    return f"data:image/jpeg;base64,{encoded}"
 
 
 def collect_visualizations(workdir: str) -> List[Dict[str, str]]:
@@ -87,7 +86,13 @@ def collect_visualizations(workdir: str) -> List[Dict[str, str]]:
     if not os.path.isdir(workdir):
         return visualizations
 
-    for name in sorted(os.listdir(workdir)):
+    def sort_key(filename: str):
+        page_match = re.search(r"_page_(\d+)_", filename)
+        if page_match:
+            return (0, int(page_match.group(1)), filename)
+        return (1, filename)
+
+    for name in sorted(os.listdir(workdir), key=sort_key):
         if not name.lower().endswith(("_detected.jpg", "_detected.jpeg", "_detected.png", "_detected.webp")):
             continue
 

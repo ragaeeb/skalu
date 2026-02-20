@@ -1,32 +1,38 @@
-# See https://help.github.com/ignore-files/ for more about ignoring files.
-
 .flaskenv*
 
-# Python
 __pycache__/
 *.py[cod]
 *$py.class
+.minimax
 .pytest_cache/
 venv/
 env/
 .env/
 .venv/
 
-# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Project specific
 input/*
 !input/.gitkeep
 output/*
 !output/.gitkeep
 
-# OS specific
 .DS_Store
 Thumbs.db
 
-# Jupyter Notebook
 .ipynb_checkpoints
+
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfvars
+infra/*.tfstate
+infra/*.tfstate.backup
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+*.env

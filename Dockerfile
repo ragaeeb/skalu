@@ -1,38 +1,42 @@
-FROM python:3.13-slim
+FROM oven/bun:1.3.9 AS frontend-builder
 
-# Set working directory
-WORKDIR /app
+WORKDIR /app/frontend
+COPY frontend ./frontend
 
-# Copy dependency manifests first to leverage Docker cache
-COPY requirements.txt requirements_dev.txt ./
+WORKDIR /app/frontend/frontend
+RUN bun install --frozen-lockfile
+RUN bun run build
 
-# Install system and Python dependencies
+
+FROM python:3.14-slim
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    curl \
-    libgl1 \
-    libglib2.0-0 \
-    libfreetype6-dev \
+        curl \
+        libgl1 \
+        libglib2.0-0 \
+        libfreetype6-dev \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && /root/.local/bin/uv pip install --system -r requirements.txt
+    && rm -rf /var/lib/apt/lists/*
 
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Copy the rest of the application code
-COPY . .
+WORKDIR /app
 
-# Ensure data directories exist for optional batch processing
-ENV INPUT_DIR=/data \
-    OUTPUT_DIR=/output \
+COPY requirements.txt ./
+RUN uv pip install --system --no-cache -r requirements.txt
+
+COPY app.py demo_utils.py skalu.py pyproject.toml ./
+COPY backend ./backend
+COPY --from=frontend-builder /app/frontend/frontend/dist ./frontend/dist
+
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
+ENV PORT=8080 \
     PYTHONUNBUFFERED=1
-RUN mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" && \
-    chmod +x /app/entrypoint.sh
 
-# Expose the port Render assigns (defaults to 10000 locally)
-EXPOSE 10000
+EXPOSE 8080
 
-# Use the helper script so the container can run either the CLI or the web demo
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["web"]
+CMD ["python", "app.py"]

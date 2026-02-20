@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": true,
+  "separate-pull-requests": true,
+  "packages": {
+    ".": {
+      "component": "backend",
+      "release-type": "python",
+      "package-name": "skalu-backend",
+      "changelog-path": "CHANGELOG.md",
+      "exclude-paths": [
+        "frontend/**"
+      ]
+    },
+    "frontend": {
+      "component": "frontend",
+      "release-type": "node",
+      "package-name": "skalu-frontend",
+      "changelog-path": "frontend/CHANGELOG.md"
+    }
+  }
+}

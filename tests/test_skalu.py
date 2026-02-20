@@ -464,6 +464,98 @@ class TestProcessPDF(unittest.TestCase):
             self.assertTrue(success)
             self.assertGreater(len(callback_calls), 0)
 
+    @patch("skalu.detect_rectangles", return_value=[])
+    @patch("skalu.detect_horizontal_lines", return_value=[])
+    @patch("skalu.fitz")
+    def test_process_pdf_include_empty_pages(
+        self, mock_fitz, _mock_detect_lines, _mock_detect_rectangles
+    ):
+        """Include empty PDF pages in output when include_empty_pages is enabled."""
+        mock_doc = MagicMock()
+        mock_doc.__len__.return_value = 3
+        mock_fitz.open.return_value = mock_doc
+
+        mock_page = MagicMock()
+        mock_page.mediabox = MagicMock(width=612, height=792)
+        mock_page.cropbox = MagicMock(width=612, height=792)
+
+        mock_pix = MagicMock()
+        mock_pix.width = 1224
+        mock_pix.height = 1584
+        test_img = np.ones((100, 100, 3), dtype=np.uint8) * 255
+        _, buffer = cv2.imencode('.png', test_img)
+        mock_pix.tobytes.return_value = buffer.tobytes()
+
+        mock_page.get_pixmap.return_value = mock_pix
+        mock_doc.load_page.return_value = mock_page
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "output.json"
+            success = process_pdf("test.pdf", str(output_path), include_empty_pages=True)
+
+            self.assertTrue(success)
+            with output_path.open("r", encoding="utf-8") as output_file:
+                result = json.load(output_file)
+
+            self.assertEqual(len(result["pages"]), 3)
+            for index, page in enumerate(result["pages"], start=1):
+                self.assertEqual(page["page"], index)
+                self.assertNotIn("horizontal_lines", page)
+                self.assertNotIn("rectangles", page)
+
+            filtered_output_path = Path(tmpdir) / "filtered_output.json"
+            filtered_success = process_pdf(
+                "test.pdf",
+                str(filtered_output_path),
+                include_empty_pages=False,
+            )
+
+            self.assertTrue(filtered_success)
+            with filtered_output_path.open("r", encoding="utf-8") as output_file:
+                filtered_result = json.load(output_file)
+
+            self.assertEqual(filtered_result["pages"], [])
+
+    @patch("skalu.cv2.imdecode", return_value=None)
+    @patch("skalu.fitz")
+    def test_process_pdf_keeps_page_when_decode_fails(self, mock_fitz, _mock_imdecode):
+        """Page entries should not be dropped when decode fails and include_empty_pages is on."""
+        mock_doc = MagicMock()
+        mock_doc.__len__.return_value = 1
+        mock_fitz.open.return_value = mock_doc
+
+        mock_page = MagicMock()
+        mock_page.mediabox = MagicMock(width=612, height=792)
+        mock_page.cropbox = MagicMock(width=612, height=792)
+
+        mock_pix = MagicMock()
+        mock_pix.width = 1224
+        mock_pix.height = 1584
+        mock_pix.n = 0
+        mock_pix.samples = b""
+        mock_pix.tobytes.return_value = b"invalid-png-data"
+
+        mock_page.get_pixmap.return_value = mock_pix
+        mock_doc.load_page.return_value = mock_page
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "output.json"
+            success = process_pdf(
+                "test.pdf",
+                str(output_path),
+                include_empty_pages=True,
+            )
+
+            self.assertTrue(success)
+            with output_path.open("r", encoding="utf-8") as output_file:
+                result = json.load(output_file)
+
+            self.assertEqual(len(result["pages"]), 1)
+            self.assertEqual(result["pages"][0]["page"], 1)
+            self.assertEqual(result["pages"][0]["width"], 1224)
+            self.assertEqual(result["pages"][0]["height"], 1584)
+            self.assertIn("processing_warning", result["pages"][0])
+
     def test_process_pdf_invalid_file(self):
         """Test processing invalid PDF file."""
         with tempfile.TemporaryDirectory() as tmpdir:

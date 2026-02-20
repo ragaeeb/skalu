@@ -1,0 +1,36 @@
+import path from "node:path"
+import { readFileSync } from "node:fs"
+import react from "@vitejs/plugin-react"
+import tailwindcss from "@tailwindcss/vite"
+import { defineConfig } from "vite"
+
+const frontendPackage = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+) as { version?: string }
+
+const frontendVersion = frontendPackage.version ?? "0.0.0"
+const gitSha = process.env.VITE_GIT_SHA ?? process.env.GIT_SHA ?? "dev"
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  define: {
+    __APP_VERSION__: JSON.stringify(frontendVersion),
+    __APP_GIT_SHA__: JSON.stringify(gitSha),
+  },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+  server: {
+    proxy: {
+      "/analyze": "http://localhost:8080",
+      "/health": "http://localhost:8080",
+      "/version": "http://localhost:8080",
+    },
+  },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
+})

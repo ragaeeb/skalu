@@ -1,9 +1,10 @@
-# Runtime dependencies
-opencv-python-headless>=4.12.0.88
-numpy>=2.2.5
-tqdm>=4.67.1
-PyMuPDF>=1.26.6
-Pillow>=12.0.0
-Flask>=3.1.2
-gunicorn>=23.0.0
-streamlit>=1.51.0
+opencv-python-headless==4.13.0.92
+numpy==2.4.2
+tqdm==4.67.3
+PyMuPDF==1.27.1
+Pillow==12.1.1
+Flask==3.1.2
+flask-cors==6.0.2
+flask-compress==1.23
+Flask-Limiter==4.1.1
+gunicorn==25.1.0
