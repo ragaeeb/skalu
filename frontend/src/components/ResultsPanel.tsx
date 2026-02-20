@@ -158,9 +158,6 @@ export const ResultsPanel = ({ result }: ResultsPanelProps) => {
 
     useEffect(() => {
         if (!result) {
-            if (downloadUrl) {
-                URL.revokeObjectURL(downloadUrl);
-            }
             setDownloadUrl(null);
             return;
         }
@@ -174,12 +171,7 @@ export const ResultsPanel = ({ result }: ResultsPanelProps) => {
         };
     }, [result]);
 
-    const parsedResult = useMemo(() => {
-        if (!result) {
-            return null;
-        }
-        return result.result_data as AnalyzeResultData;
-    }, [result]);
+    const parsedResult: AnalyzeResultData | null = result?.result_data ?? null;
 
     const sortedPages = useMemo(() => {
         if (!parsedResult || !('pages' in parsedResult)) {

@@ -80,7 +80,7 @@ def run_analysis(workdir: str, filename: str, options: AnalyzeOptions, progress_
                 debug_groups.append({"title": group["title"], "images": images})
 
     return {
-        "detection_params": detection_params or params,
+        "detection_params": detection_params if detection_params is not None else params,
         "result_data": result_data,
         "processed_filename": filename,
         "visualizations": visualizations,

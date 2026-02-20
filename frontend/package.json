@@ -51,7 +51,7 @@
         "test:e2e": "playwright test",
         "test:integration": "bun test tests/integration",
         "test:unit": "bun test tests/unit",
-        "types:generate": "bunx tsc -p tsconfig.types.json && cp dist-types/types.d.ts dist-types/skalu-api.d.ts"
+        "types:generate": "bunx tsc -p tsconfig.types.json && mv dist-types/types.d.ts dist-types/skalu-api.d.ts"
     },
     "type": "module",
     "version": "0.1.0"

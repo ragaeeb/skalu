@@ -217,7 +217,6 @@ Request:
 Success (`stream=false`, `200`):
 - JSON object containing:
   - `result_data`
-  - `summary`
   - `detection_params`
   - optional `visualizations`, `debug_groups`
 
