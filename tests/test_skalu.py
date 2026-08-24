@@ -199,6 +199,73 @@ class TestDetectHorizontalLines(unittest.TestCase):
         self.assertAlmostEqual(footnote_lines[0]["x"], 656, delta=12)
         self.assertGreaterEqual(footnote_lines[0]["width"], 260)
 
+    def test_ruhayli_haqq_page_35_short_footnote_separator(self):
+        """Detect a real separator that spans only sixteen percent of the page."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ruhayli_haqq_page35_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1190))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1225 <= line["y"] <= 1275]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 862, delta=12)
+        self.assertAlmostEqual(footnote_lines[0]["y"], 1249, delta=10)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 190)
+        self.assertLessEqual(footnote_lines[0]["height"], 10)
+
+    def test_ibrahim_bayan_page_35_merges_broken_true_separator(self):
+        """Merge the lightly broken rule above the two real footnotes."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page35_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (2480, 1753))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 2215 <= line["y"] <= 2245]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 894, delta=20)
+        self.assertAlmostEqual(footnote_lines[0]["y"], 2228, delta=10)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 450)
+        self.assertLessEqual(footnote_lines[0]["height"], 10)
+
+    def test_ibrahim_bayan_page_2_ignores_cover_decoration(self):
+        """Do not expose cover artwork seams as layout rules."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page02_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertEqual(lines, [])
+
+    def test_ibrahim_bayan_page_3_ignores_publisher_frame(self):
+        """Do not expose the publisher contact frame as a document rule."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page03_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertFalse(any(1800 <= line["y"] <= 1900 for line in lines))
+
+    def test_ibrahim_mawqif_page_3_ignores_outer_frame(self):
+        """Do not expose the title-page outer frame as a document rule."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_mawqif_page03_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertFalse(any(900 <= line["y"] <= 980 for line in lines))
+
 
 class TestDetectRectangles(unittest.TestCase):
     """Test rectangle detection functionality."""

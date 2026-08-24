@@ -10,7 +10,7 @@ import numpy as np
 
 __version__ = "1.0.1"
 
-DEFAULT_MIN_LINE_WIDTH_RATIO = 0.18
+DEFAULT_MIN_LINE_WIDTH_RATIO = 0.16
 
 
 def _even_kernel_width(width):
@@ -45,6 +45,99 @@ def _merge_collinear_line_fragments(fragments, max_gap):
         match.update({"x": left, "y": top, "width": right - left, "height": bottom - top})
 
     return merged
+
+
+def _is_thin_rotated_contour(contour, minimum_width, max_line_height):
+    """Accept a lightly skewed rule whose axis-aligned box is slightly tall."""
+    (_, _), (first_side, second_side), _ = cv2.minAreaRect(contour)
+    thickness = min(first_side, second_side)
+    length = max(first_side, second_side)
+    return length >= minimum_width and thickness <= max_line_height
+
+
+def _surrounding_ink_density(binary_image, line, band_height):
+    """Measure whether a candidate is embedded in artwork instead of whitespace."""
+    image_height, image_width = binary_image.shape[:2]
+    x_start = max(0, line["x"])
+    x_end = min(image_width, line["x"] + line["width"])
+    y_start = max(0, line["y"])
+    y_end = min(image_height, line["y"] + line["height"])
+    above = binary_image[max(0, y_start - band_height):y_start, x_start:x_end]
+    below = binary_image[y_end:min(image_height, y_end + band_height), x_start:x_end]
+    bands = [band for band in (above, below) if band.size]
+    if not bands:
+        return 0.0
+    return sum(float(np.count_nonzero(band)) / float(band.size) for band in bands) / len(bands)
+
+
+def _consolidate_horizontal_candidates(lines, binary_image, max_line_height):
+    """Merge one skewed rule and discard dense or multi-edge artwork clusters."""
+    groups = []
+    for candidate in sorted(lines, key=lambda line: (line["y"], line["x"])):
+        candidate_right = candidate["x"] + candidate["width"]
+        candidate_bottom = candidate["y"] + candidate["height"]
+        matching_group = None
+        for group in groups:
+            group_right = max(line["x"] + line["width"] for line in group)
+            group_bottom = max(line["y"] + line["height"] for line in group)
+            group_left = min(line["x"] for line in group)
+            group_top = min(line["y"] for line in group)
+            horizontal_overlap = min(candidate_right, group_right) - max(candidate["x"], group_left)
+            vertical_gap = max(candidate["y"] - group_bottom, group_top - candidate_bottom, 0)
+            if horizontal_overlap > 0 and vertical_gap <= max_line_height:
+                matching_group = group
+                break
+
+        if matching_group is None:
+            groups.append([candidate])
+        else:
+            matching_group.append(candidate)
+
+    consolidated = []
+    for group in groups:
+        left = min(line["x"] for line in group)
+        top = min(line["y"] for line in group)
+        right = max(line["x"] + line["width"] for line in group)
+        bottom = max(line["y"] + line["height"] for line in group)
+        vertical_span = bottom - top
+
+        # A real rule may be lightly skewed, but multiple nearby frame/artwork
+        # edges produce a much taller cluster.
+        if len(group) > 1 and vertical_span > max_line_height * 1.5:
+            continue
+
+        line = {
+            "x": left,
+            "y": top,
+            "width": right - left,
+            "height": min(max_line_height, max(line["height"] for line in group)),
+        }
+        surrounding_ink_density = _surrounding_ink_density(binary_image, line, max_line_height + 2)
+        is_wide_embedded_edge = line["width"] >= binary_image.shape[1] * 0.5 and surrounding_ink_density >= 0.15
+        if surrounding_ink_density >= 0.65 or is_wide_embedded_edge:
+            continue
+        consolidated.append(line)
+
+    paired_artwork = set()
+    image_width = binary_image.shape[1]
+    for first_index, first in enumerate(consolidated):
+        for second_index in range(first_index + 1, len(consolidated)):
+            second = consolidated[second_index]
+            first_center_y = first["y"] + first["height"] / 2
+            second_center_y = second["y"] + second["height"] / 2
+            left, right = (first, second) if first["x"] <= second["x"] else (second, first)
+            horizontal_gap = right["x"] - (left["x"] + left["width"])
+            reference_width = max(first["width"], second["width"])
+            similar_widths = abs(first["width"] - second["width"]) <= reference_width * 0.15
+            if (
+                abs(first_center_y - second_center_y) <= max_line_height
+                and similar_widths
+                and max_line_height < horizontal_gap <= image_width * 0.15
+                and first["width"] + second["width"] >= image_width * 0.3
+            ):
+                paired_artwork.update((first_index, second_index))
+
+    return [line for index, line in enumerate(consolidated) if index not in paired_artwork]
 
 
 def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_RATIO, max_line_height=10, debug_dir=None):
@@ -134,8 +227,13 @@ def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_R
     fragments = []
     for c in fragment_contours:
         x, y, cw, ch = cv2.boundingRect(c)
-        if cw >= fragment_open_width and ch <= max_line_height:
-            fragments.append({"x": x, "y": y, "width": cw, "height": ch})
+        is_thin_rule = ch <= max_line_height or _is_thin_rotated_contour(
+            c,
+            fragment_open_width,
+            max_line_height,
+        )
+        if cw >= fragment_open_width and is_thin_rule:
+            fragments.append({"x": x, "y": y, "width": cw, "height": min(ch, max_line_height)})
 
     max_fragment_gap = max(max_line_height, int(w * 0.01))
     merged_fragment_lines = [
@@ -145,23 +243,24 @@ def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_R
     ]
 
     for fragment_line in merged_fragment_lines:
-        duplicate = next(
-            (
-                line
-                for line in lines
-                if min(line["y"] + line["height"], fragment_line["y"] + fragment_line["height"])
-                - max(line["y"], fragment_line["y"]) > 0
-                and min(line["x"] + line["width"], fragment_line["x"] + fragment_line["width"])
-                - max(line["x"], fragment_line["x"]) > 0
-            ),
-            None,
-        )
-        if duplicate is None:
+        duplicates = [
+            line
+            for line in lines
+            if abs(
+                (line["y"] + line["height"] / 2)
+                - (fragment_line["y"] + fragment_line["height"] / 2)
+            ) <= max_line_height
+            and min(line["x"] + line["width"], fragment_line["x"] + fragment_line["width"])
+            - max(line["x"], fragment_line["x"]) > 0
+        ]
+        if not duplicates:
             lines.append(fragment_line)
-        elif fragment_line["width"] > duplicate["width"] + max_fragment_gap:
-            lines.remove(duplicate)
+        elif fragment_line["width"] > max(line["width"] for line in duplicates) + max_fragment_gap:
+            for duplicate in duplicates:
+                lines.remove(duplicate)
             lines.append(fragment_line)
 
+    lines = _consolidate_horizontal_candidates(lines, bw_otsu, max_line_height)
     lines.sort(key=lambda L: L["y"])
     return lines
 
