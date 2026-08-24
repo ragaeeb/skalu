@@ -10,7 +10,44 @@ import numpy as np
 
 __version__ = "1.0.1"
 
-def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
+DEFAULT_MIN_LINE_WIDTH_RATIO = 0.19
+
+
+def _even_kernel_width(width):
+    """Keep OpenCV morphology anchored consistently across kernel sizes."""
+    return width + 1 if width > 1 and width % 2 == 1 else width
+
+
+def _merge_collinear_line_fragments(fragments, max_gap):
+    """Merge scan-broken horizontal fragments before applying the width cutoff."""
+    merged = []
+    for fragment in sorted(fragments, key=lambda line: (line["y"], line["x"])):
+        fragment_right = fragment["x"] + fragment["width"]
+        match = None
+        for line in merged:
+            line_bottom = line["y"] + line["height"]
+            fragment_bottom = fragment["y"] + fragment["height"]
+            vertical_overlap = min(line_bottom, fragment_bottom) - max(line["y"], fragment["y"])
+            line_right = line["x"] + line["width"]
+            horizontal_gap = max(fragment["x"] - line_right, line["x"] - fragment_right, 0)
+            if vertical_overlap > 0 and horizontal_gap <= max_gap:
+                match = line
+                break
+
+        if match is None:
+            merged.append(fragment.copy())
+            continue
+
+        left = min(match["x"], fragment["x"])
+        top = min(match["y"], fragment["y"])
+        right = max(match["x"] + match["width"], fragment_right)
+        bottom = max(match["y"] + match["height"], fragment["y"] + fragment["height"])
+        match.update({"x": left, "y": top, "width": right - left, "height": bottom - top})
+
+    return merged
+
+
+def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_RATIO, max_line_height=10, debug_dir=None):
     """
     Detects only long, thin horizontal lines in an image.
     
@@ -68,22 +105,58 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
 
     # -- 5) Morphological open with a dynamic horizontal kernel
     orig_min_width = int(min_line_width_ratio * w)
-    # make the open‐kernel a bit smaller (80%) so broken/faint bars still survive erosion
-    open_width = max(int(orig_min_width * 0.8), 1)
-    horiz_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (open_width, 1))
-    opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, horiz_kern, iterations=1)
+    primary_reference_width = max(orig_min_width, int(w * 0.2))
+    primary_open_width = _even_kernel_width(max(int(primary_reference_width * 0.8), 1))
+    fragment_open_width = _even_kernel_width(max(int(orig_min_width * 0.6), 1))
 
-    # … then your usual contour‐find + filter:
-    contours, _ = cv2.findContours(
-        opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    primary_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (primary_open_width, 1))
+    fragment_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (fragment_open_width, 1))
+    primary_opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, primary_kernel, iterations=1)
+    fragment_opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, fragment_kernel, iterations=1)
+
+    primary_contours, _ = cv2.findContours(
+        primary_opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    fragment_contours, _ = cv2.findContours(
+        fragment_opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
     lines = []
-    for c in contours:
+    for c in primary_contours:
         x, y, cw, ch = cv2.boundingRect(c)
-        # *still* require the original minimum width
         if cw >= orig_min_width and ch <= max_line_height:
-            lines.append({"x":x, "y":y, "width":cw, "height":ch})
+            lines.append({"x": x, "y": y, "width": cw, "height": ch})
+
+    fragments = []
+    for c in fragment_contours:
+        x, y, cw, ch = cv2.boundingRect(c)
+        if cw >= fragment_open_width and ch <= max_line_height:
+            fragments.append({"x": x, "y": y, "width": cw, "height": ch})
+
+    max_fragment_gap = max(max_line_height, int(w * 0.01))
+    merged_fragment_lines = [
+        line
+        for line in _merge_collinear_line_fragments(fragments, max_fragment_gap)
+        if line["width"] >= orig_min_width and line["height"] <= max_line_height
+    ]
+
+    for fragment_line in merged_fragment_lines:
+        duplicate = next(
+            (
+                line
+                for line in lines
+                if min(line["y"] + line["height"], fragment_line["y"] + fragment_line["height"])
+                - max(line["y"], fragment_line["y"]) > 0
+                and min(line["x"] + line["width"], fragment_line["x"] + fragment_line["width"])
+                - max(line["x"], fragment_line["x"]) > 0
+            ),
+            None,
+        )
+        if duplicate is None:
+            lines.append(fragment_line)
+        elif fragment_line["width"] > duplicate["width"] + max_fragment_gap:
+            lines.remove(duplicate)
+            lines.append(fragment_line)
 
     lines.sort(key=lambda L: L["y"])
     return lines
@@ -254,7 +327,7 @@ def process_pdf(
         return False
 
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -534,7 +607,7 @@ def process_single_image(
     dpi_x, dpi_y = get_image_dpi(image_path)
     
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -624,7 +697,7 @@ def process_folder(folder_path, output_json_path, params=None, debug_dir=None, s
         return False
 
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -704,7 +777,7 @@ def main():
     parser.add_argument("-o", "--output", help="Output JSON file path")
     
     # Line detection parameters
-    parser.add_argument("--min-width-ratio", type=float, default=0.2,
+    parser.add_argument("--min-width-ratio", type=float, default=DEFAULT_MIN_LINE_WIDTH_RATIO,
                         help="Min line width as fraction of image width")
     parser.add_argument("--max-height", type=int, default=10,
                         help="Max line thickness in pixels")

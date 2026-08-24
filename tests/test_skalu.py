@@ -69,6 +69,27 @@ class TestDetectHorizontalLines(unittest.TestCase):
         lines = detect_horizontal_lines(self.img_short_line, min_line_width_ratio=0.5)
         self.assertEqual(len(lines), 0, "Short line should not be detected with high threshold")
 
+    def test_default_detects_nineteen_percent_footnote_rule(self):
+        """The default should retain short footnote rules seen in the book corpus."""
+        image = np.ones((300, 400, 3), dtype=np.uint8) * 255
+        cv2.rectangle(image, (250, 240), (325, 242), (0, 0, 0), -1)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertEqual(len(lines), 1)
+        self.assertGreaterEqual(lines[0]["width"], 76)
+
+    def test_merges_collinear_fragments_before_width_filtering(self):
+        """A small scan gap should not split one qualifying rule into two rejected fragments."""
+        image = np.ones((300, 400, 3), dtype=np.uint8) * 255
+        cv2.rectangle(image, (200, 240), (259, 242), (0, 0, 0), -1)
+        cv2.rectangle(image, (265, 240), (324, 242), (0, 0, 0), -1)
+
+        lines = detect_horizontal_lines(image, min_line_width_ratio=0.2)
+
+        self.assertEqual(len(lines), 1)
+        self.assertGreaterEqual(lines[0]["width"], 120)
+
     def test_line_height_threshold(self):
         """Test max_line_height parameter."""
         # Create image with thick line

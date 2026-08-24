@@ -15,7 +15,7 @@ export default defineConfig({
     build: { emptyOutDir: true, outDir: 'dist' },
     define: { __APP_GIT_SHA__: JSON.stringify(gitSha), __APP_VERSION__: JSON.stringify(frontendVersion) },
     plugins: [react(), tailwindcss()],
-    resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+    resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
     server: {
         proxy: {
             '/analyze': 'http://localhost:8080',
