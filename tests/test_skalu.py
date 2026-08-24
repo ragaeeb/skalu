@@ -118,6 +118,87 @@ class TestDetectHorizontalLines(unittest.TestCase):
         lines = detect_horizontal_lines(gray_img, min_line_width_ratio=0.2)
         self.assertGreater(len(lines), 0, "Should detect lines in grayscale image")
 
+    def test_rabi_page_477_footnote_separator(self):
+        """Keep the short true separator on the Rabi corpus page detectable."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "rabi_page477_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1190))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1450 <= line["y"] <= 1495]
+
+        self.assertEqual(len(footnote_lines), 1)
+        line = footnote_lines[0]
+        self.assertAlmostEqual(line["x"], 700, delta=12)
+        self.assertAlmostEqual(line["y"], 1474, delta=10)
+        self.assertGreaterEqual(line["width"], 330)
+        self.assertLessEqual(line["height"], 10)
+
+    def test_najmi_page_68_footnote_separator(self):
+        """Keep a representative true separator from a second book detectable."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "najmi_page68_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 500 <= line["y"] <= 560]
+
+        self.assertEqual(len(footnote_lines), 1)
+        line = footnote_lines[0]
+        self.assertAlmostEqual(line["x"], 696, delta=15)
+        self.assertAlmostEqual(line["y"], 526, delta=10)
+        self.assertGreaterEqual(line["width"], 240)
+        self.assertLessEqual(line["height"], 10)
+
+    def test_rabi_asnaaf_page_15_faint_footnote_separator(self):
+        """Detect the faint, slightly sub-threshold rule above a real bottom footnote."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "rabi_asnaaf_page15_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1191))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 940 <= line["y"] <= 990]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 587, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 215)
+
+    def test_sadi_riyad_page_167_faint_footnote_separator(self):
+        """Detect the faint one-note rule missed by the old fragment kernel."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "sadi_riyad_page167_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1175 <= line["y"] <= 1220]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 674, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 260)
+
+    def test_sadi_riyad_page_169_faint_footnote_separator(self):
+        """Detect the faint multi-note rule missed by the old fragment kernel."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "sadi_riyad_page169_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1065 <= line["y"] <= 1110]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 656, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 260)
+
 
 class TestDetectRectangles(unittest.TestCase):
     """Test rectangle detection functionality."""

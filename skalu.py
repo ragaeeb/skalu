@@ -10,7 +10,7 @@ import numpy as np
 
 __version__ = "1.0.1"
 
-DEFAULT_MIN_LINE_WIDTH_RATIO = 0.19
+DEFAULT_MIN_LINE_WIDTH_RATIO = 0.18
 
 
 def _even_kernel_width(width):
@@ -107,7 +107,11 @@ def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_R
     orig_min_width = int(min_line_width_ratio * w)
     primary_reference_width = max(orig_min_width, int(w * 0.2))
     primary_open_width = _even_kernel_width(max(int(primary_reference_width * 0.8), 1))
-    fragment_open_width = _even_kernel_width(max(int(orig_min_width * 0.6), 1))
+    # A faint scan rule can contain several short surviving strokes even when
+    # its full visual span exceeds the configured cutoff. Preserve smaller
+    # collinear fragments here, then apply the full-width requirement after
+    # merging them below.
+    fragment_open_width = _even_kernel_width(max(int(orig_min_width * 0.25), 1))
 
     primary_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (primary_open_width, 1))
     fragment_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (fragment_open_width, 1))
