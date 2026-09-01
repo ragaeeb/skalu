@@ -490,28 +490,9 @@ def process_pdf(
             pix = page.get_pixmap(matrix=mat)
             #print(f"DEBUG - Using mediabox, no clip")
         else:
-            # thumbnail(of: renderSize, for: .cropBox) behavior:
-            # 1. Sets the page bounds to cropbox
-            # 2. Renders at the requested size based on effective bounds (cropbox)
-            # 3. Returns image with dimensions matching the renderSize calculation
-            
-            # The key insight: calculates renderSize from effectiveBounds (cropbox)
-            # and then renders the page content to fit that size
-            
-            # Save original cropbox
-            original_cropbox = page.cropbox
-            
-            # Temporarily set the page to use only the crop area
-            page.set_cropbox(crop_box)
-            
-            # Render the page - this should now give us the correct dimensions
-            # because the page bounds are now the cropbox
+            # get_pixmap already respects the page's existing CropBox. Re-applying
+            # PyMuPDF's transformed cropbox fails for MediaBoxes with non-zero origins.
             pix = page.get_pixmap(matrix=mat)
-            
-            # Restore original cropbox
-            page.set_cropbox(original_cropbox)
-            
-            #print(f"DEBUG - Using cropbox with set_cropbox method")
         
         # Get actual rendered dimensions
         actual_width = pix.width

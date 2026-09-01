@@ -563,6 +563,16 @@ class TestProcessFolder(unittest.TestCase):
 class TestProcessPDF(unittest.TestCase):
     """Test PDF processing."""
 
+    def test_process_pdf_with_offset_mediabox_cropbox(self):
+        """Render an actual cropped page whose MediaBox origin is not zero."""
+        fixture = Path(__file__).parent / "fixtures" / "madhaban-offset-mediabox-page-1.pdf"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "output.json"
+
+            self.assertTrue(process_pdf(str(fixture), str(output_path), include_empty_pages=True))
+            with output_path.open("r", encoding="utf-8") as output_file:
+                self.assertEqual(json.load(output_file)["pages"][0]["page"], 1)
+
     @patch("skalu.fitz")
     def test_process_pdf_basic(self, mock_fitz):
         """Test basic PDF processing with mocked PyMuPDF."""
@@ -595,6 +605,7 @@ class TestProcessPDF(unittest.TestCase):
             
             self.assertTrue(success)
             self.assertTrue(os.path.exists(output_path))
+            mock_page.set_cropbox.assert_not_called()
 
     @patch("skalu.fitz")
     def test_process_pdf_with_progress(self, mock_fitz):
