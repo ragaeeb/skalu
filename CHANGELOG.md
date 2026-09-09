@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/ragaeeb/skalu/compare/backend-v1.0.0...backend-v1.1.0) (2026-09-09)
+
+
+### Features
+
+* **faint:** Improve detection of faint, short, fragmented horizontal lines ([#16](https://github.com/ragaeeb/skalu/issues/16)) ([c876125](https://github.com/ragaeeb/skalu/commit/c8761254f13627f50346da8a9cab415a53c12156))
+
+
+### Bug Fixes
+
+* **contract:** Improve API contract typing ([f6be281](https://github.com/ragaeeb/skalu/commit/f6be2819d27b124f1e7119e39ce50528b1916f62))
+
 ## [1.0.0](https://github.com/ragaeeb/skalu/compare/backend-v0.2.0...backend-v1.0.0) (2026-02-20)
 
 
