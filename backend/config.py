@@ -79,7 +79,7 @@ def load_settings() -> Settings:
 
 
 DEFAULT_DETECTION_PARAMS = {
-    "min_line_width_ratio": DEFAULT_PARAMS.get("min_line_width_ratio", 0.19),
+    "min_line_width_ratio": DEFAULT_PARAMS.get("min_line_width_ratio", 0.16),
     "max_line_height": DEFAULT_PARAMS.get("max_line_height", 10),
     "min_rect_area_ratio": DEFAULT_PARAMS.get("min_rect_area_ratio", 0.001),
     "max_rect_area_ratio": DEFAULT_PARAMS.get("max_rect_area_ratio", 0.5),
