@@ -69,6 +69,27 @@ class TestDetectHorizontalLines(unittest.TestCase):
         lines = detect_horizontal_lines(self.img_short_line, min_line_width_ratio=0.5)
         self.assertEqual(len(lines), 0, "Short line should not be detected with high threshold")
 
+    def test_default_detects_nineteen_percent_footnote_rule(self):
+        """The default should retain short footnote rules seen in the book corpus."""
+        image = np.ones((300, 400, 3), dtype=np.uint8) * 255
+        cv2.rectangle(image, (250, 240), (325, 242), (0, 0, 0), -1)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertEqual(len(lines), 1)
+        self.assertGreaterEqual(lines[0]["width"], 76)
+
+    def test_merges_collinear_fragments_before_width_filtering(self):
+        """A small scan gap should not split one qualifying rule into two rejected fragments."""
+        image = np.ones((300, 400, 3), dtype=np.uint8) * 255
+        cv2.rectangle(image, (200, 240), (259, 242), (0, 0, 0), -1)
+        cv2.rectangle(image, (265, 240), (324, 242), (0, 0, 0), -1)
+
+        lines = detect_horizontal_lines(image, min_line_width_ratio=0.2)
+
+        self.assertEqual(len(lines), 1)
+        self.assertGreaterEqual(lines[0]["width"], 120)
+
     def test_line_height_threshold(self):
         """Test max_line_height parameter."""
         # Create image with thick line
@@ -96,6 +117,154 @@ class TestDetectHorizontalLines(unittest.TestCase):
         gray_img = cv2.cvtColor(self.img_with_line, cv2.COLOR_BGR2GRAY)
         lines = detect_horizontal_lines(gray_img, min_line_width_ratio=0.2)
         self.assertGreater(len(lines), 0, "Should detect lines in grayscale image")
+
+    def test_rabi_page_477_footnote_separator(self):
+        """Keep the short true separator on the Rabi corpus page detectable."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "rabi_page477_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1190))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1450 <= line["y"] <= 1495]
+
+        self.assertEqual(len(footnote_lines), 1)
+        line = footnote_lines[0]
+        self.assertAlmostEqual(line["x"], 700, delta=12)
+        self.assertAlmostEqual(line["y"], 1474, delta=10)
+        self.assertGreaterEqual(line["width"], 330)
+        self.assertLessEqual(line["height"], 10)
+
+    def test_najmi_page_68_footnote_separator(self):
+        """Keep a representative true separator from a second book detectable."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "najmi_page68_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 500 <= line["y"] <= 560]
+
+        self.assertEqual(len(footnote_lines), 1)
+        line = footnote_lines[0]
+        self.assertAlmostEqual(line["x"], 696, delta=15)
+        self.assertAlmostEqual(line["y"], 526, delta=10)
+        self.assertGreaterEqual(line["width"], 240)
+        self.assertLessEqual(line["height"], 10)
+
+    def test_rabi_asnaaf_page_15_faint_footnote_separator(self):
+        """Detect the faint, slightly sub-threshold rule above a real bottom footnote."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "rabi_asnaaf_page15_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1191))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 940 <= line["y"] <= 990]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 587, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 215)
+
+    def test_sadi_riyad_page_167_faint_footnote_separator(self):
+        """Detect the faint one-note rule missed by the old fragment kernel."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "sadi_riyad_page167_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1175 <= line["y"] <= 1220]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 674, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 260)
+
+    def test_sadi_riyad_page_169_faint_footnote_separator(self):
+        """Detect the faint multi-note rule missed by the old fragment kernel."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "sadi_riyad_page169_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1584, 1224))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1065 <= line["y"] <= 1110]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 656, delta=12)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 260)
+
+    def test_ruhayli_haqq_page_35_short_footnote_separator(self):
+        """Detect a real separator that spans only sixteen percent of the page."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ruhayli_haqq_page35_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (1684, 1190))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 1225 <= line["y"] <= 1275]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 862, delta=12)
+        self.assertAlmostEqual(footnote_lines[0]["y"], 1249, delta=10)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 190)
+        self.assertLessEqual(footnote_lines[0]["height"], 10)
+
+    def test_ibrahim_bayan_page_35_merges_broken_true_separator(self):
+        """Merge the lightly broken rule above the two real footnotes."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page35_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+        self.assertEqual(image.shape, (2480, 1753))
+
+        lines = detect_horizontal_lines(image)
+        footnote_lines = [line for line in lines if 2215 <= line["y"] <= 2245]
+
+        self.assertEqual(len(footnote_lines), 1)
+        self.assertAlmostEqual(footnote_lines[0]["x"], 894, delta=20)
+        self.assertAlmostEqual(footnote_lines[0]["y"], 2228, delta=10)
+        self.assertGreaterEqual(footnote_lines[0]["width"], 450)
+        self.assertLessEqual(footnote_lines[0]["height"], 10)
+
+    def test_ibrahim_bayan_page_2_ignores_cover_decoration(self):
+        """Do not expose cover artwork seams as layout rules."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page02_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertEqual(lines, [])
+
+    def test_ibrahim_bayan_page_3_ignores_publisher_frame(self):
+        """Do not expose the publisher contact frame as a document rule."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_bayan_page03_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertFalse(any(1800 <= line["y"] <= 1900 for line in lines))
+
+    def test_ibrahim_mawqif_page_3_ignores_outer_frame(self):
+        """Do not expose the title-page outer frame as a document rule."""
+        fixture = PROJECT_ROOT / "tests" / "fixtures" / "real_pages" / "ibrahim_mawqif_page03_144dpi.png"
+        image = cv2.imread(str(fixture), cv2.IMREAD_GRAYSCALE)
+
+        self.assertIsNotNone(image)
+
+        lines = detect_horizontal_lines(image)
+
+        self.assertFalse(any(900 <= line["y"] <= 980 for line in lines))
 
 
 class TestDetectRectangles(unittest.TestCase):
@@ -394,6 +563,16 @@ class TestProcessFolder(unittest.TestCase):
 class TestProcessPDF(unittest.TestCase):
     """Test PDF processing."""
 
+    def test_process_pdf_with_offset_mediabox_cropbox(self):
+        """Render an actual cropped page whose MediaBox origin is not zero."""
+        fixture = Path(__file__).parent / "fixtures" / "madhaban-offset-mediabox-page-1.pdf"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "output.json"
+
+            self.assertTrue(process_pdf(str(fixture), str(output_path), include_empty_pages=True))
+            with output_path.open("r", encoding="utf-8") as output_file:
+                self.assertEqual(json.load(output_file)["pages"][0]["page"], 1)
+
     @patch("skalu.fitz")
     def test_process_pdf_basic(self, mock_fitz):
         """Test basic PDF processing with mocked PyMuPDF."""
@@ -426,6 +605,7 @@ class TestProcessPDF(unittest.TestCase):
             
             self.assertTrue(success)
             self.assertTrue(os.path.exists(output_path))
+            mock_page.set_cropbox.assert_not_called()
 
     @patch("skalu.fitz")
     def test_process_pdf_with_progress(self, mock_fitz):

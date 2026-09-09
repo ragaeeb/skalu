@@ -209,7 +209,7 @@ Request:
   - `include_empty_pages` (optional, default `true`)
   - `include_visualizations` (optional, default `false`)
   - `stream` (optional, default `false`)
-  - `min_line_width_ratio` (optional, default `0.2`)
+  - `min_line_width_ratio` (optional, default `0.16`)
   - `max_line_height` (optional, default `10`)
   - `min_rect_area_ratio` (optional, default `0.001`)
   - `max_rect_area_ratio` (optional, default `0.5`)
@@ -356,7 +356,7 @@ const analyzeFile = async (baseUrl: string, file: File) => {
   form.append("include_empty_pages", "true");
   form.append("include_visualizations", "false");
   form.append("stream", "false");
-  form.append("min_line_width_ratio", "0.2");
+  form.append("min_line_width_ratio", "0.16");
   form.append("max_line_height", "10");
   form.append("min_rect_area_ratio", "0.001");
   form.append("max_rect_area_ratio", "0.5");

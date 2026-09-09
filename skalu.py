@@ -10,7 +10,137 @@ import numpy as np
 
 __version__ = "1.0.1"
 
-def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10, debug_dir=None):
+DEFAULT_MIN_LINE_WIDTH_RATIO = 0.16
+
+
+def _even_kernel_width(width):
+    """Keep OpenCV morphology anchored consistently across kernel sizes."""
+    return width + 1 if width > 1 and width % 2 == 1 else width
+
+
+def _merge_collinear_line_fragments(fragments, max_gap):
+    """Merge scan-broken horizontal fragments before applying the width cutoff."""
+    merged = []
+    for fragment in sorted(fragments, key=lambda line: (line["y"], line["x"])):
+        fragment_right = fragment["x"] + fragment["width"]
+        match = None
+        for line in merged:
+            line_bottom = line["y"] + line["height"]
+            fragment_bottom = fragment["y"] + fragment["height"]
+            vertical_overlap = min(line_bottom, fragment_bottom) - max(line["y"], fragment["y"])
+            line_right = line["x"] + line["width"]
+            horizontal_gap = max(fragment["x"] - line_right, line["x"] - fragment_right, 0)
+            if vertical_overlap > 0 and horizontal_gap <= max_gap:
+                match = line
+                break
+
+        if match is None:
+            merged.append(fragment.copy())
+            continue
+
+        left = min(match["x"], fragment["x"])
+        top = min(match["y"], fragment["y"])
+        right = max(match["x"] + match["width"], fragment_right)
+        bottom = max(match["y"] + match["height"], fragment["y"] + fragment["height"])
+        match.update({"x": left, "y": top, "width": right - left, "height": bottom - top})
+
+    return merged
+
+
+def _is_thin_rotated_contour(contour, minimum_width, max_line_height):
+    """Accept a lightly skewed rule whose axis-aligned box is slightly tall."""
+    (_, _), (first_side, second_side), _ = cv2.minAreaRect(contour)
+    thickness = min(first_side, second_side)
+    length = max(first_side, second_side)
+    return length >= minimum_width and thickness <= max_line_height
+
+
+def _surrounding_ink_density(binary_image, line, band_height):
+    """Measure whether a candidate is embedded in artwork instead of whitespace."""
+    image_height, image_width = binary_image.shape[:2]
+    x_start = max(0, line["x"])
+    x_end = min(image_width, line["x"] + line["width"])
+    y_start = max(0, line["y"])
+    y_end = min(image_height, line["y"] + line["height"])
+    above = binary_image[max(0, y_start - band_height):y_start, x_start:x_end]
+    below = binary_image[y_end:min(image_height, y_end + band_height), x_start:x_end]
+    bands = [band for band in (above, below) if band.size]
+    if not bands:
+        return 0.0
+    return sum(float(np.count_nonzero(band)) / float(band.size) for band in bands) / len(bands)
+
+
+def _consolidate_horizontal_candidates(lines, binary_image, max_line_height):
+    """Merge one skewed rule and discard dense or multi-edge artwork clusters."""
+    groups = []
+    for candidate in sorted(lines, key=lambda line: (line["y"], line["x"])):
+        candidate_right = candidate["x"] + candidate["width"]
+        candidate_bottom = candidate["y"] + candidate["height"]
+        matching_group = None
+        for group in groups:
+            group_right = max(line["x"] + line["width"] for line in group)
+            group_bottom = max(line["y"] + line["height"] for line in group)
+            group_left = min(line["x"] for line in group)
+            group_top = min(line["y"] for line in group)
+            horizontal_overlap = min(candidate_right, group_right) - max(candidate["x"], group_left)
+            vertical_gap = max(candidate["y"] - group_bottom, group_top - candidate_bottom, 0)
+            if horizontal_overlap > 0 and vertical_gap <= max_line_height:
+                matching_group = group
+                break
+
+        if matching_group is None:
+            groups.append([candidate])
+        else:
+            matching_group.append(candidate)
+
+    consolidated = []
+    for group in groups:
+        left = min(line["x"] for line in group)
+        top = min(line["y"] for line in group)
+        right = max(line["x"] + line["width"] for line in group)
+        bottom = max(line["y"] + line["height"] for line in group)
+        vertical_span = bottom - top
+
+        # A real rule may be lightly skewed, but multiple nearby frame/artwork
+        # edges produce a much taller cluster.
+        if len(group) > 1 and vertical_span > max_line_height * 1.5:
+            continue
+
+        line = {
+            "x": left,
+            "y": top,
+            "width": right - left,
+            "height": min(max_line_height, max(line["height"] for line in group)),
+        }
+        surrounding_ink_density = _surrounding_ink_density(binary_image, line, max_line_height + 2)
+        is_wide_embedded_edge = line["width"] >= binary_image.shape[1] * 0.5 and surrounding_ink_density >= 0.15
+        if surrounding_ink_density >= 0.65 or is_wide_embedded_edge:
+            continue
+        consolidated.append(line)
+
+    paired_artwork = set()
+    image_width = binary_image.shape[1]
+    for first_index, first in enumerate(consolidated):
+        for second_index in range(first_index + 1, len(consolidated)):
+            second = consolidated[second_index]
+            first_center_y = first["y"] + first["height"] / 2
+            second_center_y = second["y"] + second["height"] / 2
+            left, right = (first, second) if first["x"] <= second["x"] else (second, first)
+            horizontal_gap = right["x"] - (left["x"] + left["width"])
+            reference_width = max(first["width"], second["width"])
+            similar_widths = abs(first["width"] - second["width"]) <= reference_width * 0.15
+            if (
+                abs(first_center_y - second_center_y) <= max_line_height
+                and similar_widths
+                and max_line_height < horizontal_gap <= image_width * 0.15
+                and first["width"] + second["width"] >= image_width * 0.3
+            ):
+                paired_artwork.update((first_index, second_index))
+
+    return [line for index, line in enumerate(consolidated) if index not in paired_artwork]
+
+
+def detect_horizontal_lines(image, min_line_width_ratio=DEFAULT_MIN_LINE_WIDTH_RATIO, max_line_height=10, debug_dir=None):
     """
     Detects only long, thin horizontal lines in an image.
     
@@ -68,23 +198,69 @@ def detect_horizontal_lines(image, min_line_width_ratio=0.2, max_line_height=10,
 
     # -- 5) Morphological open with a dynamic horizontal kernel
     orig_min_width = int(min_line_width_ratio * w)
-    # make the open‐kernel a bit smaller (80%) so broken/faint bars still survive erosion
-    open_width = max(int(orig_min_width * 0.8), 1)
-    horiz_kern = cv2.getStructuringElement(cv2.MORPH_RECT, (open_width, 1))
-    opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, horiz_kern, iterations=1)
+    primary_reference_width = max(orig_min_width, int(w * 0.2))
+    primary_open_width = _even_kernel_width(max(int(primary_reference_width * 0.8), 1))
+    # A faint scan rule can contain several short surviving strokes even when
+    # its full visual span exceeds the configured cutoff. Preserve smaller
+    # collinear fragments here, then apply the full-width requirement after
+    # merging them below.
+    fragment_open_width = _even_kernel_width(max(int(orig_min_width * 0.25), 1))
 
-    # … then your usual contour‐find + filter:
-    contours, _ = cv2.findContours(
-        opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    primary_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (primary_open_width, 1))
+    fragment_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (fragment_open_width, 1))
+    primary_opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, primary_kernel, iterations=1)
+    fragment_opened = cv2.morphologyEx(bw, cv2.MORPH_OPEN, fragment_kernel, iterations=1)
+
+    primary_contours, _ = cv2.findContours(
+        primary_opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+    fragment_contours, _ = cv2.findContours(
+        fragment_opened, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
 
     lines = []
-    for c in contours:
+    for c in primary_contours:
         x, y, cw, ch = cv2.boundingRect(c)
-        # *still* require the original minimum width
         if cw >= orig_min_width and ch <= max_line_height:
-            lines.append({"x":x, "y":y, "width":cw, "height":ch})
+            lines.append({"x": x, "y": y, "width": cw, "height": ch})
 
+    fragments = []
+    for c in fragment_contours:
+        x, y, cw, ch = cv2.boundingRect(c)
+        is_thin_rule = ch <= max_line_height or _is_thin_rotated_contour(
+            c,
+            fragment_open_width,
+            max_line_height,
+        )
+        if cw >= fragment_open_width and is_thin_rule:
+            fragments.append({"x": x, "y": y, "width": cw, "height": min(ch, max_line_height)})
+
+    max_fragment_gap = max(max_line_height, int(w * 0.01))
+    merged_fragment_lines = [
+        line
+        for line in _merge_collinear_line_fragments(fragments, max_fragment_gap)
+        if line["width"] >= orig_min_width and line["height"] <= max_line_height
+    ]
+
+    for fragment_line in merged_fragment_lines:
+        duplicates = [
+            line
+            for line in lines
+            if abs(
+                (line["y"] + line["height"] / 2)
+                - (fragment_line["y"] + fragment_line["height"] / 2)
+            ) <= max_line_height
+            and min(line["x"] + line["width"], fragment_line["x"] + fragment_line["width"])
+            - max(line["x"], fragment_line["x"]) > 0
+        ]
+        if not duplicates:
+            lines.append(fragment_line)
+        elif fragment_line["width"] > max(line["width"] for line in duplicates) + max_fragment_gap:
+            for duplicate in duplicates:
+                lines.remove(duplicate)
+            lines.append(fragment_line)
+
+    lines = _consolidate_horizontal_candidates(lines, bw_otsu, max_line_height)
     lines.sort(key=lambda L: L["y"])
     return lines
 
@@ -254,7 +430,7 @@ def process_pdf(
         return False
 
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -314,28 +490,9 @@ def process_pdf(
             pix = page.get_pixmap(matrix=mat)
             #print(f"DEBUG - Using mediabox, no clip")
         else:
-            # thumbnail(of: renderSize, for: .cropBox) behavior:
-            # 1. Sets the page bounds to cropbox
-            # 2. Renders at the requested size based on effective bounds (cropbox)
-            # 3. Returns image with dimensions matching the renderSize calculation
-            
-            # The key insight: calculates renderSize from effectiveBounds (cropbox)
-            # and then renders the page content to fit that size
-            
-            # Save original cropbox
-            original_cropbox = page.cropbox
-            
-            # Temporarily set the page to use only the crop area
-            page.set_cropbox(crop_box)
-            
-            # Render the page - this should now give us the correct dimensions
-            # because the page bounds are now the cropbox
+            # get_pixmap already respects the page's existing CropBox. Re-applying
+            # PyMuPDF's transformed cropbox fails for MediaBoxes with non-zero origins.
             pix = page.get_pixmap(matrix=mat)
-            
-            # Restore original cropbox
-            page.set_cropbox(original_cropbox)
-            
-            #print(f"DEBUG - Using cropbox with set_cropbox method")
         
         # Get actual rendered dimensions
         actual_width = pix.width
@@ -534,7 +691,7 @@ def process_single_image(
     dpi_x, dpi_y = get_image_dpi(image_path)
     
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -624,7 +781,7 @@ def process_folder(folder_path, output_json_path, params=None, debug_dir=None, s
         return False
 
     # Get parameters for detection
-    min_line_ratio = params.get('min_line_width_ratio', 0.2)
+    min_line_ratio = params.get('min_line_width_ratio', DEFAULT_MIN_LINE_WIDTH_RATIO)
     max_line_h = params.get('max_line_height', 10)
     min_rect_area = params.get('min_rect_area_ratio', 0.001)
     max_rect_area = params.get('max_rect_area_ratio', 0.5)
@@ -704,7 +861,7 @@ def main():
     parser.add_argument("-o", "--output", help="Output JSON file path")
     
     # Line detection parameters
-    parser.add_argument("--min-width-ratio", type=float, default=0.2,
+    parser.add_argument("--min-width-ratio", type=float, default=DEFAULT_MIN_LINE_WIDTH_RATIO,
                         help="Min line width as fraction of image width")
     parser.add_argument("--max-height", type=int, default=10,
                         help="Max line thickness in pixels")

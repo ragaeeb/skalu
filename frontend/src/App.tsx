@@ -6,7 +6,7 @@ import { analyzeFileStream, fetchVersion } from '@/lib/api';
 import type { AnalyzePayload, AnalyzeResultData, DetectionParams, VersionResponse } from '@/types';
 
 const DEFAULT_DETECTION_PARAMS: DetectionParams = {
-    min_line_width_ratio: 0.2,
+    min_line_width_ratio: 0.16,
     max_line_height: 10,
     min_rect_area_ratio: 0.001,
     max_rect_area_ratio: 0.5,
