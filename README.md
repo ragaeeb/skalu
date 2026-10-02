@@ -1,480 +1,115 @@
-# skalu
+# Skalu
 
-[![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![codecov](https://codecov.io/gh/ragaeeb/skalu/graph/badge.svg?token=VBJH3TR0KZ)](https://codecov.io/gh/ragaeeb/skalu)
-[![Flask](https://img.shields.io/badge/Flask-3.1.2-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![Bun](https://img.shields.io/badge/Bun-1.3.9+-fbf0df?logo=bun&logoColor=111111)](https://bun.sh/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111111)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
-[![Terraform](https://img.shields.io/badge/Terraform-Infra-844FBA?logo=terraform&logoColor=white)](https://www.terraform.io/)
-[![wakatime](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d.svg)](https://wakatime.com/badge/user/a0b906ce-b8e7-4463-8bce-383238df6d4b/project/26c7c021-8f40-4bb9-aa97-ba8965462f2d)
-[![Google Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Serverless-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
-[![Tests](https://github.com/ragaeeb/skalu/actions/workflows/test.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/test.yml)
-[![Release Please](https://github.com/ragaeeb/skalu/actions/workflows/release.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/release.yml)
-[![Release API Types](https://github.com/ragaeeb/skalu/actions/workflows/release-types.yml/badge.svg)](https://github.com/ragaeeb/skalu/actions/workflows/release-types.yml)
-[![codecov](https://codecov.io/gh/ragaeeb/skalu/branch/main/graph/badge.svg)](https://codecov.io/gh/ragaeeb/skalu)
+Private PDF structure extraction on Cloudflare. Create an account, issue/rotate an API key, drop a PDF, inspect detected lines and rectangles as pages finish, and download JSON.
 
-Skalu extracts horizontal lines and rectangles from images and PDFs, with a Flask API backend and a React frontend.
+## Stack and layout
 
-## Architecture
+- `apps/web/`: React 19/Vite workbench. SSR adds no value to this authenticated application.
+- `apps/worker/`: TypeScript 7, Better Auth, job API, Workflow and cleanup.
+- `packages/engine/`: Python 3.14.7, OpenCV/PyMuPDF/Pillow in a private Cloudflare Container; shared CLI/service renderer.
+- `packages/contracts/`: public contracts and detection validation.
+- `migrations/`, `scripts/`, `e2e/`: D1 schema, operations and real Playwright acceptance tests.
 
-- Backend API: Flask (`app.py`) deployed to Google Cloud Run
-- Frontend: Vite + React + TypeScript in `frontend/`, built into the Cloud Run container
-- Infrastructure: Terraform in `infra/`
-- CI: GitHub Actions (tests + releases)
-- CD: Cloud Build GitHub triggers (direct deploy on push)
-- Frontend package manager and scripts: Bun
-
-## Prerequisites
-
-- Python 3.14
-- Bun 1.3.9+
-- `uv`
-- gcloud CLI
-- Terraform 1.9+
+See [architecture](docs/architecture.md) and [testing](TESTING.md).
 
 ## Local development
 
-### One-command startup
+Install Bun 1.4.2+, Node 26+ and [uv](https://docs.astral.sh/uv/getting-started/installation/):
 
-```bash
-./dev_up.sh
-```
-
-This launches:
-- Backend on `http://localhost:8080`
-- Frontend on `http://localhost:5173`
-
-The script traps kill signals and shuts both processes down together.
-
-### Backend only
-
-```bash
-uv venv --python 3.14 .venv
-source .venv/bin/activate
-uv pip install -r requirements_dev.txt
-python app.py
-```
-
-### Frontend only
-
-```bash
-cd frontend
-bun install
+```sh
+bun install --frozen-lockfile
 bun run dev
 ```
 
-Frontend proxies API routes to `http://localhost:8080` in dev mode.
+Open `http://localhost:8787`. Startup installs locked Python dependencies, builds the webapp, generates private local secrets, applies local D1 migrations and starts Wrangler plus native Python. D1/R2/Workflows are emulated; processing is real. Docker is unnecessary for this development path. Ctrl-C closes both services.
 
-### Environment
+## One-command deployment
 
-Copy `.env.example` and adjust values as needed:
+Prerequisites: authenticated `cf` (`cf login`), Docker with Linux amd64 build support, and **Workers Paid** with Containers, Workflows, D1 and R2 enabled. The website Pro plan and Workers Paid are separate subscriptions. Nothing upgrades billing automatically.
 
-```bash
-cp .env.example .env
+On macOS, Docker Desktop works, or install the smaller Colima builder:
+
+```sh
+brew install docker docker-buildx colima
 ```
 
-Main backend variables:
-- `PORT`
-- `ALLOWED_ORIGINS`
-- `MAX_CONTENT_LENGTH`
-- `ANALYZE_TIMEOUT_SECONDS`
-- `STREAM_HEARTBEAT_SECONDS`
-- `APP_VERSION`
-- `GIT_SHA`
-- `BUILD_TIME`
-- `LOG_LEVEL`
+Register Homebrew's Docker CLI plugin directory following `brew info docker-buildx`. Deployment automatically starts an isolated `skalu` Colima profile with no host mounts when no Docker engine is running, and stops it afterward. It never changes your default Docker context. If an engine is already running, deployment uses it.
 
-## Testing
-
-### Backend tests
-
-```bash
-source .venv/bin/activate
-pytest -q
+```sh
+bun install --frozen-lockfile
+bun run deploy
 ```
 
-### Frontend unit + integration (`bun:test`)
+The command checks authentication/Docker before remote changes, runs checks, prebuilds the native image, provisions the `skalu` D1 database and `skalu-files` R2 bucket if missing, adds retention rules and applies migrations before deployment. `cf deploy` deploys the Worker, assets, Workflow and container together at **https://skalu.ilmtest.net**, including managed DNS and TLS. Success requires a protected live check of D1/R2 and matching app/engine versions.
 
-```bash
-cd frontend
-bun run test
+The `ilmtest.net` zone must belong to the authenticated account. Set `CLOUDFLARE_ACCOUNT_ID` for multiple memberships. The production origin and custom domain live in `apps/worker/cloudflare.config.ts`; `workers.dev` and preview URLs are disabled. Local development still uses `http://localhost:8787`.
+
+`apps/worker/wrangler.config.ts` configures the bundler used by `cf`. Root `wrangler.jsonc` is only for Docker-free local emulation and runtime type generation; it contains no production domain or container configuration. Provisioned IDs and build metadata are generated in `.cloudflare/deploy-state.json`. Generated production auth secrets are saved in `.cloudflare/production-secrets.json` with mode 0600; back this up privately. Existing remote auth secrets are preserved, including deployments from another checkout. Auth/network/parse errors never trigger secret replacement. The deployment-check token is operational access deliberately renewed per deploy; its temporary file is removed afterward. Secrets never enter the browser bundle.
+
+Docker packages Python and its native PDF/image libraries for Cloudflare Containers. It is needed to build this engine, not to run the frontend or local Python development. Cloudflare runs the uploaded image; your local builder can stop after deployment. Diagnose rollout with `cf containers applications list` and `cf workflows instances list --workflow-name skalu-analysis`. Retain prior container images for rollback; code rollback does not restore D1/R2 data.
+
+If a newly created hostname temporarily fails to resolve, compare `dig @1.1.1.1 skalu.ilmtest.net` with your system resolver and check `curl https://skalu.ilmtest.net/version`. `ping` takes a hostname (`ping skalu.ilmtest.net`), not an HTTPS URL; HTTPS is the useful application check.
+
+## Accounts and privacy
+
+Better Auth stores password hashes/sessions in D1. Passwords require 12–128 characters. Email is a sign-in identifier; this release does not send verification or password-recovery emails and never treats an address as verified identity. Ownership uses immutable user IDs. Keep your password in a password manager.
+
+Browser mutations require the exact configured origin. API keys are random bearer credentials; only SHA-256 hashes and display prefixes persist. Key issuance/rotation requires a browser session; bearer access cannot mint replacements. Copy keys immediately: plaintext is shown once.
+
+R2 is private. All status/image/page/download/deletion endpoints verify ownership. Documents expire 24 hours after completion/failure; uploads after one hour; processing has a two-hour deadline. Cron runs every 15 minutes. R2 lifecycle provides a two-day storage backstop and aborts unfinished multipart uploads after one day. Delete/cancel immediately revokes artifact access. Processing capacity stays reserved until the Workflow and native engine are confirmed stopped; failed cleanup is retried by cron. Seven-day tombstones sweep interrupted writes.
+
+## Limits
+
+Sequential **8 MiB upload parts** keep large PDFs below single-request/body budgets. Maximum PDF size: **256 MiB**; page count: **1,000**; render size: **16 megapixels/page**, **one billion pixels/document**, at 144 DPI. Invalid/encrypted/oversized PDFs receive explicit errors. Split documents beyond these ceilings before upload.
+
+Each original page is a retryable Workflow step. JSON/JPEG artifacts reach R2 before progress is published, and the browser polls every two seconds. Native parsing/rendering run in killable subprocesses with CPU/memory/wall limits. Container files are disposable caches, reloaded from R2 after restart. Downloads stream page JSON with backpressure and reject incomplete jobs.
+
+Admission is atomic: one active job and 20 submissions per rolling day per account, three active jobs globally. Four containers cover jobs plus deployment checks. Containers stop after cache release or sleep after two idle minutes. Increase quotas only with capacity and load testing.
+
+These application budgets account for current [Worker limits](https://developers.cloudflare.com/workers/platform/limits/), [Workflow limits](https://developers.cloudflare.com/workflows/reference/limits/) and [Container limits](https://developers.cloudflare.com/containers/platform/limits/). Workers currently have 128 MB memory; Pro-zone request bodies are limited to 100 MB. PDF rendering runs in native containers rather than that isolate.
+
+## API
+
+API v2 is asynchronous. The public synchronous `/analyze` and server-side URL-ingestion endpoints have been removed. Job endpoints accept `Authorization: Bearer sk_...` or browser sessions. Cookie-authenticated mutations also require the configured `Origin`. Cross-origin browser access is disabled.
+
+| Method | Endpoint | Behavior |
+| --- | --- | --- |
+| GET | `/health`, `/version` | Public health/release metadata |
+| POST | `/api/auth/sign-up/email`, `/api/auth/sign-in/email` | Better Auth accounts/sessions |
+| GET / POST | `/api/key` | Prefix / initial issuance; session only |
+| POST | `/api/key/rotate` | Replace key atomically; session only |
+| POST | `/api/jobs` | JSON `{filename,size,detection_params?}`; returns `{id,part_bytes}` |
+| PUT | `/api/jobs/:id/parts/:number` | Raw bytes, exact Content-Length; part numbers start at 1 |
+| POST | `/api/jobs/:id/start` | Complete upload and enqueue once; returns 202 |
+| GET | `/api/jobs` | Latest 20 owned unexpired jobs |
+| GET | `/api/jobs/:id` | Status/progress/errors and ordered artifact URLs |
+| GET | `/api/jobs/:id/pages/:page` | Committed page JSON |
+| GET | `/api/jobs/:id/pages/:page/image` | Detected-page JPEG |
+| GET | `/api/jobs/:id/download` | Completed streamed JSON attachment |
+| DELETE | `/api/jobs/:id` | Cancel/delete document |
+
+Detection parameters: `min_line_width_ratio` (0.16), `max_line_height` (10), `min_rect_area_ratio` (0.001), `max_rect_area_ratio` (0.5). Coordinates are rendered pixels; original page numbers include blank pages. Lines are green and rectangles blue.
+
+See the executable [Bun client](scripts/analyze.ts):
+
+```sh
+SKALU_URL=https://skalu.ilmtest.net SKALU_KEY=sk_... bun scripts/analyze.ts document.pdf
 ```
 
-### Frontend E2E (Playwright)
+Generate declarations with `bun run types:generate`: `packages/contracts/dist/types.d.ts`. Exports include API/engine version, filename, detection parameters, pages and DPI. Images use separate URLs instead of base64 JSON.
 
-```bash
-cd frontend
-bunx playwright install chromium
-bunx playwright test
+## Offline engine
+
+```sh
+uv run --project packages/engine python packages/engine/skalu.py document.pdf --output results.json --save-viz
 ```
 
-## Type declarations
+The original image/folder CLI remains available; hosted processing accepts PDFs only.
 
-Generate a client-consumable API declaration file:
+## Releases
 
-```bash
-cd frontend
-bun run types:generate
-```
+Release Please tracks root application and `packages/engine/` independently. Conventional commits drive semantic versions. App releases synchronize web/Worker/contracts versions; engine releases update Python metadata and service/CLI markers. `/version` reports app version, Git SHA/build timestamp; exports record the actual engine version. Protocol 1 supports the Worker/container rollout window and must change through a compatible transition. A job detects an engine-version change and fails explicitly rather than exporting mixed-version detections; submit the PDF again after rollout.
 
-Output file:
-- `frontend/dist-types/skalu-api.d.ts`
+Google Cloud deployment/setup is removed. Release Please remains provider-independent release tooling.
 
-Release automation:
-- On each published GitHub Release, `.github/workflows/release-types.yml` generates and uploads `skalu-api.d.ts` as a release asset.
-
-Client usage (Vite or Next.js):
-1. Download `skalu-api.d.ts` from the release assets.
-2. Add it to your app, for example `src/types/skalu-api.d.ts`.
-3. Import the types in your API client code.
-
-Example:
-
-```ts
-import type { AnalyzePayload, AnalyzeStreamEvent } from "./types/skalu-api";
-
-export const parseAnalyzeResponse = async (res: Response): Promise<AnalyzePayload> => {
-  return res.json() as Promise<AnalyzePayload>;
-};
-
-export const parseStreamEvent = (line: string): AnalyzeStreamEvent => {
-  return JSON.parse(line) as AnalyzeStreamEvent;
-};
-```
-
-TypeScript config note:
-- Ensure your `tsconfig.json` includes your declaration location (for example `src/**/*` or `src/types/**/*`).
-
-## API highlights
-
-- Health check: `GET /health`
-- Version metadata: `GET /version`
-- Analyze file: `POST /analyze` (multipart)
-  - Fields:
-    - `file` (mutually exclusive with `file_url`)
-    - `file_url` (mutually exclusive with `file`; public `http(s)` PDF URL)
-    - `include_empty_pages` (`true|false`)
-    - `include_visualizations` (`true|false`)
-    - `stream` (`true|false`)
-    - `min_line_width_ratio`
-    - `max_line_height`
-    - `min_rect_area_ratio`
-    - `max_rect_area_ratio`
-  - `stream=false`: returns JSON payload
-  - `stream=true`: returns `application/x-ndjson` events (`accepted`, `progress`, `heartbeat`, `result`, `error`)
-
-## Public API reference
-
-Base URL:
-- `https://skalu-api-<service-hash>-uc.a.run.app`
-
-### `GET /health`
-
-Purpose:
-- Liveness/readiness check.
-
-Response `200`:
-
-```json
-{ "status": "ok" }
-```
-
-### `GET /version`
-
-Purpose:
-- Returns backend version/build metadata.
-
-Response `200`:
-
-```json
-{
-  "backend_version": "0.2.0",
-  "frontend_version": null,
-  "git_sha": "dev",
-  "build_time": "unknown"
-}
-```
-
-### `POST /analyze`
-
-Purpose:
-- Analyze one uploaded PDF/image in a single request.
-
-Request:
-- Content type: `multipart/form-data`
-- Fields:
-  - `file` (optional): uploaded PDF or image (`pdf,png,jpg,jpeg,bmp,tiff,webp`)
-  - `file_url` (optional): public PDF URL (only `http`/`https`)
-  - `include_empty_pages` (optional, default `true`)
-  - `include_visualizations` (optional, default `false`)
-  - `stream` (optional, default `false`)
-  - `min_line_width_ratio` (optional, default `0.16`)
-  - `max_line_height` (optional, default `10`)
-  - `min_rect_area_ratio` (optional, default `0.001`)
-  - `max_rect_area_ratio` (optional, default `0.5`)
-
-Success (`stream=false`, `200`):
-- JSON object containing:
-  - `result_data`
-  - `detection_params`
-  - optional `visualizations`, `debug_groups`
-
-Success (`stream=true`, `200`):
-- `Content-Type: application/x-ndjson`
-- Event types:
-  - `accepted`
-  - `progress`
-  - `heartbeat`
-  - `result` (terminal success)
-  - `error` (terminal failure)
-
-Common errors:
-- `400`: missing file, unsupported extension, invalid params
-- `400`: invalid `file_url` (non-public host, bad scheme, non-PDF response, too large)
-- `408`: analysis timeout
-- `500`: processing/storage failure
-
-### `file_url` security checks
-
-When `file_url` is provided, the API enforces sanity checks before processing:
-- URL must be `http://` or `https://`.
-- Host must resolve to public IPs only (blocks loopback/private/link-local/reserved ranges).
-- `localhost` and metadata hosts are blocked.
-- Response must look like a PDF (`Content-Type` check) and download size is capped by server `MAX_CONTENT_LENGTH`.
-- `file` and `file_url` cannot be sent together.
-
-## Deploy setup (GCP)
-
-1. Authenticate and select project:
-   - `gcloud auth login`
-   - `gcloud auth application-default login`
-   - `gcloud config set project YOUR_PROJECT_ID`
-   - `gcloud auth application-default set-quota-project YOUR_PROJECT_ID`
-2. Link billing to the project.
-3. Run bootstrap:
-   - `scripts/bootstrap_cloud.sh --region us-central1 --allowed-origins "*" --run-terraform-apply`
-4. Complete one-time Cloud Build GitHub connection in console:
-   - `https://console.cloud.google.com/cloud-build/triggers;region=global/connect?project=YOUR_PROJECT_ID`
-5. Re-run:
-   - `terraform -chdir=infra apply`
-6. Verify:
-   - `API_URL="$(terraform -chdir=infra output -raw api_url)"`
-   - `curl -fsS "${API_URL}/health"`
-   - `curl -fsS "${API_URL}/version"`
-7. Push to `main` to trigger deploys via Cloud Build.
-   - Note: trigger runs when changed files match configured deploy paths (`backend/**`, `frontend/**`, `Dockerfile`, etc.).
-
-Detailed setup is in [`cloud_setup.md`](cloud_setup.md).
-
-## Monitoring and logs
-
-### Local development logs
-
-- Combined local logs (backend + frontend):
-
-```bash
-./dev_up.sh
-```
-
-- Backend only logs:
-
-```bash
-source .venv/bin/activate
-python app.py
-```
-
-- Frontend only logs:
-
-```bash
-cd frontend
-bun run dev
-```
-
-### Cloud Build deploy logs
-
-- List recent builds:
-
-```bash
-gcloud builds list --project YOUR_PROJECT_ID --region us-central1 --limit=20
-```
-
-- Stream a build:
-
-```bash
-gcloud builds log --project YOUR_PROJECT_ID --region us-central1 --stream BUILD_ID
-```
-
-- Console:
-  - Cloud Build -> History
-
-### Cloud Run service/revision logs (API + frontend container)
-
-- Tail service logs:
-
-```bash
-gcloud run services logs tail skalu-api --project YOUR_PROJECT_ID --region us-central1
-```
-
-- Read recent logs:
-
-```bash
-gcloud run services logs read skalu-api --project YOUR_PROJECT_ID --region us-central1 --limit=200
-```
-
-- Read logs for one specific revision:
-
-```bash
-gcloud logging read \
-  'resource.type="cloud_run_revision" AND resource.labels.service_name="skalu-api" AND resource.labels.revision_name="REVISION_NAME"' \
-  --project YOUR_PROJECT_ID \
-  --limit=200
-```
-
-- Console:
-  - Cloud Run -> `skalu-api` -> Logs
-  - Cloud Logging -> Logs Explorer (filter `resource.type="cloud_run_revision"`)
-
-## Deployed URL shape
-
-- Terraform output `api_url` is your base URL.
-- Example format (Cloud Run):
-  - `https://skalu-api-<service-hash>-uc.a.run.app`
-- Example endpoints:
-  - `https://skalu-api-<service-hash>-uc.a.run.app/health`
-  - `https://skalu-api-<service-hash>-uc.a.run.app/version`
-  - `https://skalu-api-<service-hash>-uc.a.run.app/analyze`
-
-## Calling the API from another app (TypeScript)
-
-### Non-stream request (`stream=false`)
-
-```ts
-const analyzeFile = async (baseUrl: string, file: File) => {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("include_empty_pages", "true");
-  form.append("include_visualizations", "false");
-  form.append("stream", "false");
-  form.append("min_line_width_ratio", "0.16");
-  form.append("max_line_height", "10");
-  form.append("min_rect_area_ratio", "0.001");
-  form.append("max_rect_area_ratio", "0.5");
-
-  const res = await fetch(`${baseUrl}/analyze`, {
-    method: "POST",
-    body: form,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Analyze failed: ${res.status} ${await res.text()}`);
-  }
-
-  return await res.json();
-};
-```
-
-### URL-based request (`file_url`)
-
-```ts
-const analyzePdfUrl = async (baseUrl: string, pdfUrl: string) => {
-  const form = new FormData();
-  form.append("file_url", pdfUrl);
-  form.append("include_empty_pages", "true");
-  form.append("include_visualizations", "false");
-  form.append("stream", "false");
-
-  const res = await fetch(`${baseUrl}/analyze`, {
-    method: "POST",
-    body: form,
-  });
-
-  if (!res.ok) {
-    throw new Error(`Analyze failed: ${res.status} ${await res.text()}`);
-  }
-
-  return await res.json();
-};
-```
-
-### Streaming request (`stream=true`, NDJSON)
-
-```ts
-type StreamEvent =
-  | { type: "accepted"; filename: string; started_at: string }
-  | { type: "progress"; processed: number; total: number; message: string }
-  | { type: "heartbeat"; ts: string }
-  | { type: "result"; payload: unknown }
-  | { type: "error"; code: string; message: string };
-
-const analyzeFileStream = async (
-  baseUrl: string,
-  file: File,
-  onEvent: (event: StreamEvent) => void,
-) => {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("include_empty_pages", "true");
-  form.append("include_visualizations", "false");
-  form.append("stream", "true");
-
-  const res = await fetch(`${baseUrl}/analyze`, {
-    method: "POST",
-    body: form,
-  });
-  if (!res.ok || !res.body) {
-    throw new Error(`Stream request failed: ${res.status}`);
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let newlineIndex = buffer.indexOf("\n");
-    while (newlineIndex !== -1) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (line.length > 0) {
-        onEvent(JSON.parse(line) as StreamEvent);
-      }
-      newlineIndex = buffer.indexOf("\n");
-    }
-  }
-};
-```
-
-## External access and CORS
-
-- Yes, another app can call this API from outside your project.
-- Server-to-server calls are not blocked by CORS.
-- Browser calls are subject to CORS:
-  - `ALLOWED_ORIGINS="*"` allows any browser origin.
-  - If you lock down `ALLOWED_ORIGINS`, only listed origins can call from browsers.
-
-## CI workflows
-
-- `.github/workflows/test.yml`: Python tests (uv + Python 3.14)
-- `.github/workflows/release.yml`: Release Please (manifest mode for backend + frontend)
-- `.github/workflows/release-types.yml`: Generates `skalu-api.d.ts` and uploads it to published GitHub Releases
-
-## Cloud Build pipelines
-
-- `cloudbuild/api.cloudbuild.yaml`: frontend tests + full image build (frontend + backend) + Cloud Run deploy + smoke checks
-
-## Versioning
-
-Release Please reads conventional commits on `main` and opens release PRs:
-
-- `fix:` -> patch bump
-- `feat:` -> minor bump
-- `feat!:` or `BREAKING CHANGE:` -> major bump
-
-Version sources:
-
-- Backend: `pyproject.toml` (`project.version`)
-- Frontend: `frontend/package.json` (`version`)
+Manual GitHub deployment is available in `.github/workflows/deploy.yml`. Configure a scoped `CLOUDFLARE_API_TOKEN` secret and the `CLOUDFLARE_ACCOUNT_ID` repository variable for CI; the local deploy uses your `cf` authentication and the same production domain.

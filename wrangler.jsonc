@@ -1,0 +1,84 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "skalu",
+    "main": "apps/worker/src/worker.ts",
+    "compatibility_date": "2026-09-29",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "workers_dev": true,
+    "preview_urls": false,
+    "assets": {
+        "directory": "apps/web/dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": [
+            "/api/*",
+            "/health",
+            "/version"
+        ]
+    },
+    "vars": {
+        "APP_ORIGIN": "http://localhost:8787",
+        "APP_VERSION": "2.0.0",
+        "GIT_SHA": "dev",
+        "BUILD_TIME": "dev",
+        "ENGINE_LOCAL_URL": "http://127.0.0.1:8080"
+    },
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "skalu",
+            "database_id": "00000000-0000-0000-0000-000000000000",
+            "migrations_dir": "migrations"
+        }
+    ],
+    "r2_buckets": [
+        {
+            "binding": "FILES",
+            "bucket_name": "skalu-files"
+        }
+    ],
+    "workflows": [
+        {
+            "binding": "ANALYSIS",
+            "name": "skalu-analysis",
+            "class_name": "AnalysisWorkflow"
+        }
+    ],
+    "durable_objects": {
+        "bindings": [
+            {
+                "name": "ENGINE",
+                "class_name": "EngineContainer"
+            }
+        ]
+    },
+    "exports": {
+        "EngineContainer": {
+            "type": "durable-object",
+            "storage": "sqlite"
+        }
+    },
+    "triggers": {
+        "crons": [
+            "*/15 * * * *"
+        ]
+    },
+    "limits": {
+        "cpu_ms": 300000,
+        "subrequests": 30000
+    },
+    "observability": {
+        "enabled": true,
+        "traces": {
+            "enabled": true
+        }
+    },
+    "secrets": {
+        "required": [
+            "BETTER_AUTH_SECRET",
+            "DEPLOY_CHECK_TOKEN"
+        ]
+    }
+}

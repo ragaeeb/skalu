@@ -1,19 +1,41 @@
 {
-    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
     "include-component-in-tag": true,
     "packages": {
         ".": {
+            "release-type": "node",
+            "component": "app",
+            "package-name": "skalu",
+            "exclude-paths": [
+                "packages/engine/**"
+            ],
             "changelog-path": "CHANGELOG.md",
-            "component": "backend",
-            "exclude-paths": ["frontend/**"],
-            "package-name": "skalu-backend",
-            "release-type": "python"
+            "extra-files": [
+                {
+                    "type": "json",
+                    "path": "apps/web/package.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "apps/worker/package.json",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "json",
+                    "path": "packages/contracts/package.json",
+                    "jsonpath": "$.version"
+                }
+            ]
         },
-        "frontend": {
-            "changelog-path": "frontend/CHANGELOG.md",
-            "component": "frontend",
-            "package-name": "skalu-frontend",
-            "release-type": "node"
+        "packages/engine": {
+            "release-type": "python",
+            "component": "engine",
+            "package-name": "skalu-engine",
+            "changelog-path": "CHANGELOG.md",
+            "extra-files": [
+                "server.py",
+                "skalu.py"
+            ]
         }
     },
     "separate-pull-requests": false

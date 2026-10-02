@@ -1,0 +1,19 @@
+{
+    "dependencies": {
+        "@better-auth/drizzle-adapter": "1.7.6",
+        "@cloudflare/containers": "0.3.7",
+        "@skalu/contracts": "workspace:*",
+        "better-auth": "1.7.6",
+        "drizzle-orm": "0.45.3"
+    },
+    "devDependencies": {
+        "wrangler": "4.144.0"
+    },
+    "name": "@skalu/worker",
+    "private": true,
+    "scripts": {
+        "build": "cf build"
+    },
+    "type": "module",
+    "version": "2.0.0"
+}

@@ -1,0 +1,20 @@
+{
+    "dependencies": {
+        "@skalu/contracts": "workspace:*",
+        "better-auth": "1.7.6",
+        "react": "19.3.0",
+        "react-dom": "19.3.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "6.1.1",
+        "vite": "8.3.1"
+    },
+    "name": "@skalu/web",
+    "private": true,
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite"
+    },
+    "type": "module",
+    "version": "2.0.0"
+}

@@ -1,0 +1,41 @@
+{
+    "devDependencies": {
+        "@biomejs/biome": "2.5.15",
+        "@playwright/test": "1.63.0",
+        "@skalu/contracts": "workspace:*",
+        "@types/bun": "1.4.2",
+        "@types/node": "26.6.4",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "cf": "1.0.0-beta.12",
+        "typescript": "7.0.2",
+        "wrangler": "4.147.0"
+    },
+    "engines": {
+        "bun": ">=1.4.2",
+        "node": ">=26"
+    },
+    "name": "skalu",
+    "packageManager": "bun@1.4.2",
+    "private": true,
+    "scripts": {
+        "build": "bun run --cwd apps/web build",
+        "check": "biome check apps packages/contracts scripts e2e package.json tsconfig.json playwright.config.ts",
+        "db:migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+        "deploy": "bun scripts/deploy.ts",
+        "dev": "bun scripts/dev.ts",
+        "e2e:fixture": "uv run --frozen --project packages/engine python e2e/generate_pdf.py",
+        "test": "bun test scripts/*.test.ts packages/contracts/*.test.ts",
+        "test:e2e": "bun run e2e:fixture && playwright test",
+        "test:engine": "uv run --frozen --project packages/engine pytest packages/engine/tests -q",
+        "typecheck": "bun run worker:types && tsc --noEmit",
+        "types:generate": "tsc -p packages/contracts/tsconfig.json",
+        "worker:types": "wrangler types apps/worker/env.d.ts --config wrangler.jsonc"
+    },
+    "type": "module",
+    "version": "2.0.0",
+    "workspaces": [
+        "apps/*",
+        "packages/contracts"
+    ]
+}
