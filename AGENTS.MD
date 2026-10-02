@@ -27,6 +27,6 @@ Use type aliases, arrow functions and `Foo[]` in frontend code. Public contracts
 
 ## Validation and releases
 
-Use focused checks while editing, then run appropriate stable-source integration checks. See [TESTING.md](TESTING.md). Avoid editing Worker source during E2E runs. CI covers types/lint/Bun/native tests/build/Playwright. Release Please tracks app and engine versions; conventional commits determine semantic versions. `bun run types:generate` emits public declarations.
+Use focused checks while editing, then run appropriate stable-source integration checks. See [TESTING.md](TESTING.md). Avoid editing Worker source during E2E runs. CI covers types/lint/Bun/native tests/build/Playwright. Root `package.json` is the single app/engine release version; bump it manually before merging a release to `main`. `bun run types:generate` emits public declarations.
 
 For authorized commits, use `klassify git commit` directly (RTK exception). Do not commit/push without authorization.

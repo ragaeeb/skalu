@@ -1,9 +1,10 @@
 FROM python:3.14.7-slim
 COPY --from=ghcr.io/astral-sh/uv:0.12.20 /uv /usr/local/bin/uv
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
+WORKDIR /app/packages/engine
+COPY packages/engine/pyproject.toml packages/engine/uv.lock ./
 RUN uv sync --frozen --no-dev
-COPY skalu.py server.py ./
+COPY package.json /app/package.json
+COPY packages/engine/skalu.py packages/engine/server.py ./
 RUN useradd --create-home engine && chown -R engine /app
 USER engine
 ENV PYTHONUNBUFFERED=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1

@@ -12,7 +12,7 @@ import uuid
 
 from flask import Flask, jsonify, request, send_file
 
-VERSION = "2.0.0"  # x-release-please-version
+from skalu import __version__ as VERSION
 PROTOCOL = 1
 MAX_BYTES = 256 * 1024 * 1024
 MAX_PIXELS = 16_000_000

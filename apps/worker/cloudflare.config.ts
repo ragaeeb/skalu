@@ -6,7 +6,7 @@ const state = existsSync('../../.cloudflare/deploy-state.json')
     ? JSON.parse(readFileSync('../../.cloudflare/deploy-state.json', 'utf8'))
     : {};
 const engine = defineContainer({
-    image: { buildContext: '../../packages/engine', dockerfile: '../../packages/engine/Dockerfile' },
+    image: { buildContext: '../..', dockerfile: '../../packages/engine/Dockerfile' },
     instanceType: 'standard-1',
     maxInstances: 4,
     name: 'skalu-engine',

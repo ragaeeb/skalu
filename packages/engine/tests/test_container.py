@@ -2,6 +2,9 @@
 import json
 from pathlib import Path
 import tempfile
+import shutil
+import subprocess
+import sys
 
 import pymupdf as fitz
 import pytest
@@ -120,3 +123,19 @@ def test_cancellation_releases_a_waiting_native_request():
         PROCESSING.release()
         thread.join(5)
         app.test_client().delete(f"/jobs/{job_id}")
+
+
+def test_release_version_reaches_cli_and_service_from_any_cwd(tmp_path):
+    engine = tmp_path / "packages" / "engine"
+    engine.mkdir(parents=True)
+    source = Path(__file__).resolve().parents[1]
+    for name in ("skalu.py", "server.py"):
+        shutil.copyfile(source / name, engine / name)
+    (tmp_path / "package.json").write_text(json.dumps({"version": "9.8.7"}))
+    cli = subprocess.check_output([sys.executable, str(engine / "skalu.py"), "--version"],
+                                  cwd=tmp_path, text=True)
+    assert cli.strip() == "skalu.py 9.8.7"
+    health = subprocess.check_output(
+        [sys.executable, "-c", "import server; print(server.app.test_client().get('/health').get_json()['version'])"],
+        cwd=engine, text=True)
+    assert health.strip() == "9.8.7"

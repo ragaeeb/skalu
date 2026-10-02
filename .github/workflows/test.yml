@@ -26,7 +26,7 @@ jobs:
       - run: bun run test:engine
       - run: bun run build && bun run types:generate
       - run: bun run --cwd apps/worker build
-      - run: docker build --platform linux/amd64 -t skalu-engine:test packages/engine
+      - run: docker build --platform linux/amd64 -t skalu-engine:test -f packages/engine/Dockerfile .
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
       - uses: actions/upload-artifact@v6

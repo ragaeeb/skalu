@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { version } from '../package.json';
 import { ensureSecrets } from './secrets';
 
 const buildOnly = process.argv.includes('--prepare');
@@ -16,7 +17,12 @@ const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8'));
 delete config.containers;
 delete config.routes;
 config.workers_dev = true;
-config.vars = { ...config.vars, APP_ORIGIN: 'http://localhost:8787', ENGINE_LOCAL_URL: 'http://127.0.0.1:8080' };
+config.vars = {
+    ...config.vars,
+    APP_ORIGIN: 'http://localhost:8787',
+    APP_VERSION: version,
+    ENGINE_LOCAL_URL: 'http://127.0.0.1:8080',
+};
 writeFileSync(
     '.dev.vars',
     Object.entries(secrets)

@@ -1,18 +1,12 @@
-import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { version } from '../../../package.json';
 import { AccountForm } from './AccountForm';
-import { api, auth } from './client';
+import { auth } from './client';
 import { Workbench } from './Workbench';
 import './styles.css';
 
 const App = () => {
     const { data: session, isPending } = auth.useSession();
-    const [version, setVersion] = useState('');
-    useEffect(() => {
-        void api<{ version: string }>('/version')
-            .then((data) => setVersion(data.version))
-            .catch(() => undefined);
-    }, []);
     return (
         <>
             <header>

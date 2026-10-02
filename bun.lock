@@ -19,7 +19,6 @@
     },
     "apps/web": {
       "name": "@skalu/web",
-      "version": "2.0.0",
       "dependencies": {
         "@skalu/contracts": "workspace:*",
         "better-auth": "1.7.6",
@@ -33,7 +32,6 @@
     },
     "apps/worker": {
       "name": "@skalu/worker",
-      "version": "2.0.0",
       "dependencies": {
         "@better-auth/drizzle-adapter": "1.7.6",
         "@cloudflare/containers": "0.3.7",
@@ -47,7 +45,6 @@
     },
     "packages/contracts": {
       "name": "@skalu/contracts",
-      "version": "2.0.0",
     },
   },
   "packages": {

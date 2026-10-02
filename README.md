@@ -108,8 +108,8 @@ The original image/folder CLI remains available; hosted processing accepts PDFs 
 
 ## Releases
 
-Release Please tracks root application and `packages/engine/` independently. Conventional commits drive semantic versions. App releases synchronize web/Worker/contracts versions; engine releases update Python metadata and service/CLI markers. `/version` reports app version, Git SHA/build timestamp; exports record the actual engine version. Protocol 1 supports the Worker/container rollout window and must change through a compatible transition. A job detects an engine-version change and fails explicitly rather than exporting mixed-version detections; submit the PDF again after rollout.
+Root `package.json` is the single release version for the Worker, frontend and native engine. Before releasing, manually bump its `version` and commit it before merging to `main`. Use semantic versions: patch for fixes, minor for features, major for breaking changes. Commit messages do not bump versions; there are no release or deployment GitHub workflows.
 
-Google Cloud deployment/setup is removed. Release Please remains provider-independent release tooling.
+Connect the repository to Cloudflare to trigger deployment from `main`, using `bun run deploy` with the required Bun/Node/uv/Docker environment and Cloudflare credentials. That connection must be configured separately; `bun run deploy` also remains available locally.
 
-Manual GitHub deployment is available in `.github/workflows/deploy.yml`. Configure a scoped `CLOUDFLARE_API_TOKEN` secret and the `CLOUDFLARE_ACCOUNT_ID` repository variable for CI; the local deploy uses your `cf` authentication and the same production domain.
+The frontend footer imports the root version at build time; Python reads it directly; Docker includes the same `package.json`. `/version` reports the app version, Git SHA/build timestamp; exports record the actual engine version. Bump the version whenever releasing engine changes so rollout verification and mixed-version job detection remain effective. Protocol 1 supports the Worker/container rollout window and must change through a compatible transition. A job detects an engine-version change and fails explicitly rather than exporting mixed-version detections; submit the PDF again after rollout.

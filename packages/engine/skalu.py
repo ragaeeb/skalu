@@ -3,12 +3,13 @@ import os
 import sys
 import json
 import argparse
+from pathlib import Path
 from tqdm import tqdm
 from PIL import Image
 import pymupdf as fitz  # PyMuPDF
 import numpy as np
 
-__version__ = "2.0.0"  # x-release-please-version
+__version__ = json.loads((Path(__file__).resolve().parents[2] / "package.json").read_text())["version"]
 
 DEFAULT_MIN_LINE_WIDTH_RATIO = 0.16
 

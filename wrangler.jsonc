@@ -20,7 +20,7 @@
     },
     "vars": {
         "APP_ORIGIN": "http://localhost:8787",
-        "APP_VERSION": "2.0.0",
+        "APP_VERSION": "dev",
         "GIT_SHA": "dev",
         "BUILD_TIME": "dev",
         "ENGINE_LOCAL_URL": "http://127.0.0.1:8080"

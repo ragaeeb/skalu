@@ -135,7 +135,7 @@ const provision = async (version: string) => {
     return { database, origin: 'https://skalu.ilmtest.net', remote };
 };
 
-const verifyRollout = async (origin: string, version: string, engineVersion: string, token: string) => {
+const verifyRollout = async (origin: string, version: string, token: string) => {
     console.log('Worker uploaded. Verifying database, storage, and engine rollout…');
     const deadline = Date.now() + 10 * 60000;
     while (Date.now() < deadline) {
@@ -146,7 +146,7 @@ const verifyRollout = async (origin: string, version: string, engineVersion: str
             });
             if (response.ok) {
                 const health = await response.json<{ version: string; engine_version: string; protocol: number }>();
-                if (health.version === version && health.engine_version === engineVersion && health.protocol === 1) {
+                if (health.version === version && health.engine_version === version && health.protocol === 1) {
                     console.log(`Deployed Skalu ${version}: ${origin}`);
                     return;
                 }
@@ -180,18 +180,16 @@ const main = async () => {
     await run(['bun', 'run', 'test:engine']);
     await run(['bun', 'run', 'build']);
     const version = parse<{ version: string }>(readFileSync('package.json', 'utf8')).version;
-    const engineVersion = /version = "([^"]+)"/.exec(readFileSync('packages/engine/pyproject.toml', 'utf8'))?.[1];
-    if (!engineVersion) {
-        throw new Error('Engine version missing.');
-    }
     await run([
         'docker',
         'build',
         '--platform',
         'linux/amd64',
         '-t',
-        `skalu-engine:${engineVersion}`,
-        'packages/engine',
+        `skalu-engine:${version}`,
+        '-f',
+        'packages/engine/Dockerfile',
+        '.',
     ]);
     const { database, origin, remote } = await provision(version);
     const secrets: Record<string, string> = { DEPLOY_CHECK_TOKEN: crypto.randomUUID() + crypto.randomUUID() };
@@ -206,7 +204,7 @@ const main = async () => {
     try {
         await cf(['d1', 'migrations', 'apply', database.uuid, '--dir', 'migrations']);
         await cf(['deploy', '--secrets-file', `../../${secretPath}`], false, 'apps/worker');
-        await verifyRollout(origin, version, engineVersion, secrets.DEPLOY_CHECK_TOKEN!);
+        await verifyRollout(origin, version, secrets.DEPLOY_CHECK_TOKEN!);
     } finally {
         unlinkSync(secretPath);
     }
