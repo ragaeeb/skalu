@@ -1,4 +1,4 @@
-import { chmodSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { ensureSecrets } from './secrets';
 
 const run = async (args: string[], capture = false, cwd?: string): Promise<string> => {
@@ -19,6 +19,7 @@ const run = async (args: string[], capture = false, cwd?: string): Promise<strin
     }
     return stdout;
 };
+const dryRun = process.argv.includes('--dry-run');
 const cf = (args: string[], capture = false, cwd?: string) => run(['cf', ...args], capture, cwd);
 const parse = <T>(value: string): T => {
     try {
@@ -71,6 +72,21 @@ const prepareDocker = async () => {
     }
 };
 
+const writeDeployState = async (databaseId: string, version: string) => {
+    mkdirSync('.cloudflare', { mode: 0o700, recursive: true });
+    const gitSha = (await run(['git', 'rev-parse', '--short', 'HEAD'], true)).trim();
+    const dirty = (await run(['git', 'status', '--porcelain'], true)).trim().length > 0;
+    writeFileSync(
+        '.cloudflare/deploy-state.json',
+        JSON.stringify({
+            buildTime: new Date().toISOString(),
+            databaseId,
+            gitSha: `${gitSha}${dirty ? '-dirty' : ''}`,
+            version,
+        }),
+    );
+};
+
 const provision = async (version: string) => {
     const databases = parse<{ uuid: string; name: string }[]>(await cf(['d1', 'list', '--name', 'skalu'], true));
     let database = databases.find((database) => database.name === 'skalu');
@@ -112,17 +128,7 @@ const provision = async (version: string) => {
         '@.cloudflare/lifecycle.json',
         '--force',
     ]);
-    const gitSha = (await run(['git', 'rev-parse', '--short', 'HEAD'], true)).trim();
-    const dirty = (await run(['git', 'status', '--porcelain'], true)).trim().length > 0;
-    writeFileSync(
-        '.cloudflare/deploy-state.json',
-        JSON.stringify({
-            buildTime: new Date().toISOString(),
-            databaseId: database.uuid,
-            gitSha: `${gitSha}${dirty ? '-dirty' : ''}`,
-            version,
-        }),
-    );
+    await writeDeployState(database.uuid, version);
     let remote: { name: string }[];
     try {
         remote = parse(await cf(['workers', 'secrets', 'list', '--worker', 'skalu'], true));
@@ -191,6 +197,16 @@ const main = async () => {
         'packages/engine/Dockerfile',
         '.',
     ]);
+    if (dryRun) {
+        const databases = parse<{ uuid: string; name: string }[]>(await cf(['d1', 'list', '--name', 'skalu'], true));
+        const database = databases.find((database) => database.name === 'skalu');
+        if (!database) {
+            throw new Error('Production D1 database missing; dry run will not create it.');
+        }
+        await writeDeployState(database.uuid, version);
+        await cf(['deploy', '--dry-run'], false, 'apps/worker');
+        return;
+    }
     const { database, origin, remote } = await provision(version);
     const secrets: Record<string, string> = { DEPLOY_CHECK_TOKEN: crypto.randomUUID() + crypto.randomUUID() };
     if (!remote.some((secret) => secret.name === 'BETTER_AUTH_SECRET')) {

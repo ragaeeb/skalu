@@ -40,6 +40,12 @@ bun install --frozen-lockfile
 bun run deploy
 ```
 
+Validate the production build without uploading, provisioning, applying migrations or changing remote secrets:
+
+```sh
+bun run deploy --dry-run
+```
+
 The command checks authentication/Docker before remote changes, runs checks, prebuilds the native image, provisions the `skalu` D1 database and `skalu-files` R2 bucket if missing, adds retention rules and applies migrations before deployment. `cf deploy` deploys the Worker, assets, Workflow and container together at **https://skalu.ilmtest.net**, including managed DNS and TLS. Success requires a protected live check of D1/R2 and matching app/engine versions.
 
 The `ilmtest.net` zone must belong to the authenticated account. Set `CLOUDFLARE_ACCOUNT_ID` for multiple memberships. The production origin and custom domain live in `apps/worker/cloudflare.config.ts`; `workers.dev` and preview URLs are disabled. Local development still uses `http://localhost:8787`.
@@ -110,6 +116,6 @@ The original image/folder CLI remains available; hosted processing accepts PDFs 
 
 Root `package.json` is the single release version for the Worker, frontend and native engine. Before releasing, manually bump its `version` and commit it before merging to `main`. Use semantic versions: patch for fixes, minor for features, major for breaking changes. Commit messages do not bump versions; there are no release or deployment GitHub workflows.
 
-Connect the repository to Cloudflare to trigger deployment from `main`, using `bun run deploy` with the required Bun/Node/uv/Docker environment and Cloudflare credentials. That connection must be configured separately; `bun run deploy` also remains available locally.
+For Cloudflare Workers Builds, connect the production Worker to `main` with repository root `/`, build command `bun install --frozen-lockfile && python -m pip install uv==0.12.20`, and deploy command `bun run deploy`. The deploy command includes checks, the frontend/container builds, migrations and live rollout verification. Set build variables `BUN_VERSION=1.4.2`, `NODE_VERSION=26`, `PYTHON_VERSION=3.14.7`, `SKIP_DEPENDENCY_INSTALL=1` and `CLOUDFLARE_ACCOUNT_ID` to the authenticated account. The build API token must support the D1/R2/Worker/Container operations used by `scripts/deploy.ts`; local OAuth authentication does not carry into hosted builds. Keep automatic previews disabled for this production-only configuration. `bun run deploy` also remains available locally.
 
 The frontend footer imports the root version at build time; Python reads it directly; Docker includes the same `package.json`. `/version` reports the app version, Git SHA/build timestamp; exports record the actual engine version. Bump the version whenever releasing engine changes so rollout verification and mixed-version job detection remain effective. Protocol 1 supports the Worker/container rollout window and must change through a compatible transition. A job detects an engine-version change and fails explicitly rather than exporting mixed-version detections; submit the PDF again after rollout.
