@@ -1,196 +1,50 @@
-# Testing Guide for Skalu
+# Testing
 
-This document explains how to run the comprehensive unit tests for the Skalu project.
-
-## Installation
-
-Create a virtual environment with Python 3.13 and install the development
-dependencies using [`uv`](https://github.com/astral-sh/uv):
-
-```bash
-uv venv --python 3.13
-source .venv/bin/activate
-uv pip install -r requirements_dev.txt
+```sh
+bun install --frozen-lockfile
+uv sync --project packages/engine --frozen
+bun run typecheck
+bun run check
+bun run test
+bun run test:engine
+bun run build
+bun run types:generate
+bun run --cwd apps/worker build
 ```
 
-## Running Tests
+Retained engine tests cover real detection/geometry regressions. Native transport checks exercise chunk/full equivalence, blank pages, valid JPEG, cleanup, invalid/encrypted PDFs and pre-render pixel limits. Bun checks protect input validation and private, non-rotating secret bootstrap.
 
-### Run all tests
+## Playwright acceptance
 
-```bash
-uv run pytest -v
+```sh
+bun run e2e:fixture
+bunx playwright install chromium
+bun run test:e2e
 ```
 
-### Run tests with coverage report
+The generated PDF has independently known coordinates and a blank second page. Tests do not mock analysis responses. API tests traverse Better Auth, D1, R2, Workflow and native Python; browser tests cover accounts/login, key issuance/rotation, real drag/drop, decoded images before completion, reconnect and JSON downloads. Owner isolation, CSRF, old-key revocation, upload/admission guards, cancellation and failed PDFs have negative controls.
 
-```bash
-uv run pytest --cov=skalu --cov-report=html --cov-report=term
+Run without launching a browser:
+
+```sh
+bun run e2e:fixture
+bunx playwright test --project api
 ```
 
-This will generate:
-- Terminal coverage summary
-- HTML coverage report in `htmlcov/index.html`
+Use the Codex in-app browser for local interactive checks and close tabs afterward. CI runs the isolated Chromium browser suite. Interactive proof and API tests are distinct from executing the automated UI suite.
 
-### Run specific test classes
+For an isolated deployed environment:
 
-```bash
-# Test only horizontal line detection
-uv run pytest tests/test_skalu.py::TestDetectHorizontalLines -v
-
-# Test only rectangle detection
-uv run pytest tests/test_skalu.py::TestDetectRectangles -v
-
-# Test only PDF processing
-uv run pytest tests/test_skalu.py::TestProcessPDF -v
+```sh
+SKALU_E2E_ORIGIN=https://skalu-test.example.com bun run test:e2e
 ```
 
-### Run specific test methods
+Tests create synthetic accounts and delete documents; use a dedicated test deployment. Wait for native container provisioning first. Local emulation does not establish live binding/rollout correctness or Linux memory behavior. Deployment prebuilds amd64 Docker and checks the running engine.
 
-```bash
-uv run pytest tests/test_skalu.py::TestDetectHorizontalLines::test_detect_single_line -v
-```
+Do not edit Worker source during integrated tests: Wrangler reload can interrupt local Workflows. Finish edits, then run on stable source. Reconciliation reports interrupted terminal Workflows as failed jobs.
 
-### Run with verbose output
+Native timeout testing accelerates the parent OS wait while spawning, terminating and joining a real child, and asserts HTTP 504 plus no surviving child/cache. Local expiry testing moves a stored job deadline into the past, invokes the real scheduled handler and checks the actual R2 source is deleted.
 
-```bash
-uv run pytest tests/test_skalu.py -vv
-```
+The scoped `bun run test` command is the CI entrypoint; bare `bun test` also discovers Playwright specs and is not a valid aggregate. Cleanup regression uses actual D1/R2 with one injected transient Workflow termination failure, checks retry ordering and retained admission capacity. Running-job E2E cancellation checks the native cache and R2 artifacts are gone before admitting a replacement.
 
-## Test Coverage
-
-The test suite covers:
-
-1. **Horizontal Line Detection** (`TestDetectHorizontalLines`)
-   - Single line detection
-   - No lines in blank images
-   - Line width threshold filtering
-   - Line height threshold filtering
-   - Debug output generation
-   - Grayscale image support
-
-2. **Rectangle Detection** (`TestDetectRectangles`)
-   - Rectangle detection
-   - Square detection (as rectangles)
-   - Area threshold filtering
-   - Debug output generation
-   - No rectangles in blank images
-
-3. **Visualization** (`TestDrawDetections`)
-   - Drawing horizontal lines
-   - Drawing rectangles
-   - Drawing both lines and rectangles
-   - Handling empty detection lists
-
-4. **DPI Extraction** (`TestGetImageDPI`)
-   - Successful DPI extraction
-   - Handling missing files
-
-5. **Utility Functions** (`TestRound3`)
-   - Rounding to 3 decimal places
-   - Positive and negative numbers
-   - Integer handling
-
-6. **Single Image Processing** (`TestProcessSingleImage`)
-   - Valid image processing
-   - Non-existent file handling
-   - Visualization generation
-   - Debug output generation
-   - Custom parameters
-   - Progress callbacks
-
-7. **Folder Processing** (`TestProcessFolder`)
-   - Multiple image processing
-   - Empty folder handling
-   - Visualization generation
-
-8. **PDF Processing** (`TestProcessPDF`)
-   - Basic PDF processing (mocked)
-   - Progress callbacks
-   - Invalid file handling
-
-9. **CLI Integration** (`TestCLIIntegration`)
-   - Executes `python skalu.py` against `tests/test.pdf`
-   - Compares the generated JSON with `tests/expected_test_results.json`
-
-## Continuous Integration
-
-To run tests in CI/CD pipelines, use:
-
-```bash
-uv run pytest --cov=skalu --cov-report=xml --cov-report=term
-```
-
-The XML report can be uploaded to code coverage services like Codecov or Coveralls.
-
-## Writing New Tests
-
-When adding new features to Skalu, follow these guidelines:
-
-1. Create a new test class that inherits from `unittest.TestCase`
-2. Use descriptive test method names starting with `test_`
-3. Use `setUp()` to create test fixtures
-4. Use `tearDown()` to clean up temporary files
-5. Use assertions to verify expected behavior
-6. Test both success and failure cases
-7. Mock external dependencies (like PDF libraries) when needed
-
-Example:
-
-```python
-class TestNewFeature(unittest.TestCase):
-    def setUp(self):
-        """Prepare test fixtures."""
-        self.test_data = create_test_data()
-    
-    def tearDown(self):
-        """Clean up after tests."""
-        cleanup_test_data()
-    
-    def test_feature_works(self):
-        """Test that the feature works correctly."""
-        result = my_function(self.test_data)
-        self.assertEqual(result, expected_value)
-    
-    def test_feature_handles_errors(self):
-        """Test that the feature handles errors gracefully."""
-        with self.assertRaises(ValueError):
-            my_function(invalid_data)
-```
-
-## Troubleshooting
-
-### ImportError: No module named 'skalu'
-
-Make sure you're running tests from the project root directory where `skalu.py` is located.
-
-### OpenCV errors
-
-If you encounter OpenCV-related errors, ensure you have the required system libraries installed:
-
-**Ubuntu/Debian:**
-```bash
-sudo apt-get install libgl1 libglib2.0-0
-```
-
-**macOS:**
-```bash
-brew install opencv
-```
-
-### Temporary file cleanup issues
-
-If tests fail due to permission issues with temporary files, check that:
-- You have write permissions in the temp directory
-- No other processes are holding locks on test files
-- The `tearDown()` methods are executing properly
-
-## Test Metrics
-
-Current test coverage target: **80%+**
-
-To view detailed coverage:
-
-```bash
-uv run pytest --cov=skalu --cov-report=html
-open htmlcov/index.html
-```
+The cleanup regression also covers the production transport: failed destruction retains capacity/storage; delayed destruction must settle before either is released. Its deferred provider promise verifies owner-side ordering; the runtime teardown contract is verified against the pinned SDK and Cloudflare documentation. Live API acceptance additionally checks the real Container/R2 transport: a stream accepted by Miniflare can still lack R2's known-length marker in production.

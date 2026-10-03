@@ -1,0 +1,9 @@
+{
+    "exports": {
+        "./limits": "./src/limits.ts",
+        "./types": "./src/types.ts"
+    },
+    "name": "@skalu/contracts",
+    "private": true,
+    "type": "module"
+}

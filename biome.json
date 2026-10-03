@@ -6,7 +6,9 @@
                 "organizeImports": "on",
                 "useSortedKeys": {
                     "level": "on",
-                    "options": { "sortOrder": "natural" }
+                    "options": {
+                        "sortOrder": "natural"
+                    }
                 }
             }
         }
@@ -18,7 +20,14 @@
     },
     "files": {
         "ignoreUnknown": true,
-        "includes": ["**", "!node_modules", "!.next", "!dist", "!build"]
+        "includes": [
+            "**",
+            "!node_modules",
+            "!.next",
+            "!dist",
+            "!build",
+            "!apps/worker/env.d.ts"
+        ]
     },
     "formatter": {
         "enabled": true,
@@ -39,7 +48,6 @@
     },
     "linter": {
         "domains": {
-            "next": "recommended",
             "react": "recommended"
         },
         "enabled": true,
@@ -53,8 +61,15 @@
                     "fix": "safe",
                     "level": "error",
                     "options": {
-                        "attributes": ["className"],
-                        "functions": ["cn", "cva", "tw", "clsx"]
+                        "attributes": [
+                            "className"
+                        ],
+                        "functions": [
+                            "cn",
+                            "cva",
+                            "tw",
+                            "clsx"
+                        ]
                     }
                 }
             },

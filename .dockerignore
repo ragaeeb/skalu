@@ -1,0 +1,9 @@
+*
+!package.json
+!packages/
+!packages/engine/
+!packages/engine/Dockerfile
+!packages/engine/pyproject.toml
+!packages/engine/uv.lock
+!packages/engine/skalu.py
+!packages/engine/server.py
