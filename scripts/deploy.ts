@@ -191,6 +191,7 @@ const main = async () => {
         'build',
         '--platform',
         'linux/amd64',
+        ...(process.env.WRANGLER_CI_OVERRIDE_NETWORK_MODE_HOST ? ['--network', 'host'] : []),
         '-t',
         `skalu-engine:${version}`,
         '-f',
